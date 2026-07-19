@@ -2,21 +2,20 @@
 
 #include <Arduino.h>
 
-#include "Mixer.h"
-
 class MotorDriver final {
  public:
   explicit MotorDriver(Print& diagnostics);
 
   void begin();
-  void setTargets(const MotorTargets& targets);
+  void setTargets(int16_t left, int16_t right);
   void stop();
 
-  MotorTargets targets() const;
+  int16_t leftTarget() const;
+  int16_t rightTarget() const;
 
  private:
   Print& diagnostics_;
-  MotorTargets targets_{};
+  int16_t leftTarget_ = 0;
+  int16_t rightTarget_ = 0;
   bool hasOutput_ = false;
 };
-

@@ -11,8 +11,8 @@ constexpr uint32_t FailsafeTimeoutMs = 500;
 constexpr uint8_t HubRxPin = 10;
 constexpr uint8_t HubTxPin = 11;
 
-constexpr int16_t IntentMinimum = -100;
-constexpr int16_t IntentMaximum = 100;
+constexpr int16_t ThrottleMinimum = -100;
+constexpr int16_t ThrottleMaximum = 100;
 constexpr size_t ProtocolBufferSize = 48;
 
 // Accept the same protocol through the USB serial monitor for bench testing.

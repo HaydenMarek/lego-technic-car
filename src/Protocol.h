@@ -14,7 +14,6 @@ enum class CommandType : uint8_t {
 struct DriverCommand {
   CommandType type = CommandType::Invalid;
   int16_t throttle = 0;
-  int16_t steering = 0;
 };
 
 class Protocol final {
@@ -38,4 +37,3 @@ class Protocol final {
   size_t length_ = 0;
   bool overflowed_ = false;
 };
-

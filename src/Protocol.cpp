@@ -56,20 +56,18 @@ void Protocol::sendStopAcknowledgement() {
 
 void Protocol::sendDriveAcknowledgement(const DriverCommand& command) {
   transport_.print(F("ACK,D,"));
-  transport_.print(command.throttle);
-  transport_.print(',');
-  transport_.println(command.steering);
+  transport_.println(command.throttle);
 }
 
 void Protocol::sendError() { transport_.println(F("ERR")); }
 
 DriverCommand Protocol::parse(const char* packet) {
   if (strcmp(packet, "PING") == 0) {
-    return {CommandType::Ping, 0, 0};
+    return {CommandType::Ping, 0};
   }
 
   if (strcmp(packet, "STOP") == 0) {
-    return {CommandType::Stop, 0, 0};
+    return {CommandType::Stop, 0};
   }
 
   if (packet[0] != 'D' || packet[1] != ',') {
@@ -78,20 +76,16 @@ DriverCommand Protocol::parse(const char* packet) {
 
   const char* cursor = packet + 2;
   int16_t throttle = 0;
-  int16_t steering = 0;
-  if (!parseNumber(cursor, ',', throttle) ||
-      !parseNumber(cursor, '\0', steering)) {
+  if (!parseNumber(cursor, '\0', throttle)) {
     return {};
   }
 
-  if (throttle < Config::IntentMinimum ||
-      throttle > Config::IntentMaximum ||
-      steering < Config::IntentMinimum ||
-      steering > Config::IntentMaximum) {
+  if (throttle < Config::ThrottleMinimum ||
+      throttle > Config::ThrottleMaximum) {
     return {};
   }
 
-  return {CommandType::Drive, throttle, steering};
+  return {CommandType::Drive, throttle};
 }
 
 bool Protocol::parseNumber(const char*& cursor, char delimiter, int16_t& value) {

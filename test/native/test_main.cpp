@@ -3,7 +3,6 @@
 
 #include <string>
 
-#include "Mixer.h"
 #include "MotorDriver.h"
 #include "Protocol.h"
 #include "Vehicle.h"
@@ -44,7 +43,7 @@ void protocolAcceptsIntentCommandsAndRejectsMalformedInput() {
   Protocol protocol(stream);
   DriverCommand command;
 
-  stream.receive("PING\r\nD,-100,100\nD,101,0\nD,1,2x\n");
+  stream.receive("PING\r\nD,-100\nD,101\nD,1,2\n");
 
   assert(protocol.poll(command));
   assert(command.type == CommandType::Ping);
@@ -52,7 +51,6 @@ void protocolAcceptsIntentCommandsAndRejectsMalformedInput() {
   assert(protocol.poll(command));
   assert(command.type == CommandType::Drive);
   assert(command.throttle == -100);
-  assert(command.steering == 100);
 
   assert(protocol.poll(command));
   assert(command.type == CommandType::Invalid);
@@ -80,7 +78,7 @@ void protocolRecoversAfterOverflow() {
 void protocolWritesStableReplies() {
   FakeStream stream;
   Protocol protocol(stream);
-  const DriverCommand drive{CommandType::Drive, 50, -25};
+  const DriverCommand drive{CommandType::Drive, 50};
 
   protocol.sendReady();
   protocol.sendPong();
@@ -89,44 +87,24 @@ void protocolWritesStableReplies() {
   protocol.sendError();
 
   assert(stream.output() ==
-         "READY\nPONG\nACK,STOP\nACK,D,50,-25\nERR\n");
+         "READY\nPONG\nACK,STOP\nACK,D,50\nERR\n");
 }
 
-void mixerPreservesIntentRatioWithinLimits() {
-  MotorTargets targets = Mixer::mix(50, 25);
-  assert(targets.left == 75);
-  assert(targets.right == 25);
-
-  targets = Mixer::mix(100, 100);
-  assert(targets.left == 100);
-  assert(targets.right == 0);
-
-  targets = Mixer::mix(80, 40);
-  assert(targets.left == 100);
-  assert(targets.right == 33);
-
-  targets = Mixer::mix(0, -100);
-  assert(targets.left == -100);
-  assert(targets.right == 100);
-}
-
-void vehicleOwnsMixingAndStopBehavior() {
+void vehicleAppliesThrottleToBothMotorsAndStops() {
   FakeStream diagnostics;
   MotorDriver motorDriver(diagnostics);
   Vehicle vehicle(motorDriver);
 
   motorDriver.begin();
-  vehicle.setIntent(50, 25);
+  vehicle.setThrottle(50);
   assert(vehicle.throttle() == 50);
-  assert(vehicle.steering() == 25);
-  assert(motorDriver.targets().left == 75);
-  assert(motorDriver.targets().right == 25);
+  assert(motorDriver.leftTarget() == 50);
+  assert(motorDriver.rightTarget() == 50);
 
   vehicle.stop();
   assert(vehicle.throttle() == 0);
-  assert(vehicle.steering() == 0);
-  assert(motorDriver.targets().left == 0);
-  assert(motorDriver.targets().right == 0);
+  assert(motorDriver.leftTarget() == 0);
+  assert(motorDriver.rightTarget() == 0);
 }
 
 void watchdogTimesOutOnceAndHandlesClockRollover() {
@@ -153,9 +131,7 @@ int main() {
   protocolAcceptsIntentCommandsAndRejectsMalformedInput();
   protocolRecoversAfterOverflow();
   protocolWritesStableReplies();
-  mixerPreservesIntentRatioWithinLimits();
-  vehicleOwnsMixingAndStopBehavior();
+  vehicleAppliesThrottleToBothMotorsAndStops();
   watchdogTimesOutOnceAndHandlesClockRollover();
   return 0;
 }
-

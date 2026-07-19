@@ -31,7 +31,7 @@ class Application final {
     watchdog_.begin(millis());
 
     Serial.println(F("Vehicle controller ready"));
-    Serial.println(F("Commands: PING | STOP | D,<throttle>,<steering>"));
+    Serial.println(F("Commands: PING | STOP | D,<throttle>"));
     hubProtocol_.sendReady();
   }
 
@@ -66,7 +66,7 @@ class Application final {
           break;
 
         case CommandType::Drive:
-          vehicle_.setIntent(command.throttle, command.steering);
+          vehicle_.setThrottle(command.throttle);
           watchdog_.refresh(millis());
           protocol.sendDriveAcknowledgement(command);
           break;
@@ -96,4 +96,3 @@ Application& application() {
 void setup() { application().begin(); }
 
 void loop() { application().update(); }
-

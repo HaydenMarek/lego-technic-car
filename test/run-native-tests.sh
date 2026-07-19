@@ -13,7 +13,6 @@ g++ \
   -I"$project_dir/test/native" \
   -I"$project_dir/src" \
   "$project_dir/test/native/test_main.cpp" \
-  "$project_dir/src/Mixer.cpp" \
   "$project_dir/src/MotorDriver.cpp" \
   "$project_dir/src/Protocol.cpp" \
   "$project_dir/src/Vehicle.cpp" \
