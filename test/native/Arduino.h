@@ -6,6 +6,14 @@
 
 #define F(value) value
 
+constexpr uint8_t LOW = 0;
+constexpr uint8_t HIGH = 1;
+constexpr uint8_t OUTPUT = 1;
+
+inline void digitalWrite(uint8_t, uint8_t) {}
+inline void pinMode(uint8_t, uint8_t) {}
+inline void analogWrite(uint8_t, int) {}
+
 template <typename T>
 constexpr T max(T left, T right) {
   return left > right ? left : right;
@@ -44,4 +52,3 @@ class Stream : public Print {
   virtual int available() = 0;
   virtual int read() = 0;
 };
-

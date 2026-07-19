@@ -26,25 +26,33 @@ class Application final {
     Serial.begin(Config::UsbBaud);
     hubSerial_.begin(Config::HubBaud);
 
-    motorDriver_.begin();
+    const uint32_t now = millis();
+    motorDriver_.begin(now);
     vehicle_.stop();
-    watchdog_.begin(millis());
+    watchdog_.begin(now);
 
     Serial.println(F("Vehicle controller ready"));
+    Serial.println(Config::EnableBts7960Outputs
+                       ? F("Motor output: BTS7960")
+                       : F("Motor output: serial bench mode"));
     Serial.println(F("Commands: PING | STOP | D,<throttle>"));
     hubProtocol_.sendReady();
   }
 
   void update() {
+    const uint32_t now = millis();
+
     process(hubProtocol_);
     if (Config::EnableMonitorCommands) {
       process(monitorProtocol_);
     }
 
-    if (watchdog_.update(millis())) {
+    if (watchdog_.update(now)) {
       vehicle_.stop();
       Serial.println(F("FAILSAFE: vehicle stopped"));
     }
+
+    motorDriver_.update(now);
 
     digitalWrite(LED_BUILTIN, watchdog_.isTimedOut() ? LOW : HIGH);
   }
@@ -55,7 +63,6 @@ class Application final {
     while (protocol.poll(command)) {
       switch (command.type) {
         case CommandType::Ping:
-          watchdog_.refresh(millis());
           protocol.sendPong();
           break;
 

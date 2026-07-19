@@ -95,16 +95,44 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
   MotorDriver motorDriver(diagnostics);
   Vehicle vehicle(motorDriver);
 
-  motorDriver.begin();
+  motorDriver.begin(0);
   vehicle.setThrottle(50);
   assert(vehicle.throttle() == 50);
   assert(motorDriver.leftTarget() == 50);
   assert(motorDriver.rightTarget() == 50);
+  assert(motorDriver.leftApplied() == 0);
+  assert(motorDriver.rightApplied() == 0);
+
+  motorDriver.update(19);
+  assert(motorDriver.leftApplied() == 0);
+
+  motorDriver.update(20);
+  assert(motorDriver.leftApplied() == 5);
+  assert(motorDriver.rightApplied() == 5);
+
+  motorDriver.update(200);
+  assert(motorDriver.leftApplied() == 50);
+  assert(motorDriver.rightApplied() == 50);
+
+  vehicle.setThrottle(-50);
+  motorDriver.update(380);
+  assert(motorDriver.leftApplied() == 5);
+  assert(motorDriver.rightApplied() == 5);
+
+  motorDriver.update(400);
+  assert(motorDriver.leftApplied() == 0);
+  assert(motorDriver.rightApplied() == 0);
+
+  motorDriver.update(420);
+  assert(motorDriver.leftApplied() == -5);
+  assert(motorDriver.rightApplied() == -5);
 
   vehicle.stop();
   assert(vehicle.throttle() == 0);
   assert(motorDriver.leftTarget() == 0);
   assert(motorDriver.rightTarget() == 0);
+  assert(motorDriver.leftApplied() == 0);
+  assert(motorDriver.rightApplied() == 0);
 }
 
 void watchdogTimesOutOnceAndHandlesClockRollover() {
