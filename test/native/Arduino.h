@@ -1,0 +1,47 @@
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#define F(value) value
+
+template <typename T>
+constexpr T max(T left, T right) {
+  return left > right ? left : right;
+}
+
+class Print {
+ public:
+  virtual ~Print() = default;
+  virtual size_t write(uint8_t value) = 0;
+
+  size_t print(const char* value) {
+    size_t written = 0;
+    while (*value != '\0') {
+      written += write(static_cast<uint8_t>(*value++));
+    }
+    return written;
+  }
+
+  size_t print(char value) { return write(static_cast<uint8_t>(value)); }
+
+  size_t print(int value) {
+    char buffer[16]{};
+    snprintf(buffer, sizeof(buffer), "%d", value);
+    return print(buffer);
+  }
+
+  size_t println(const char* value) {
+    return print(value) + print('\n');
+  }
+
+  size_t println(int value) { return print(value) + print('\n'); }
+};
+
+class Stream : public Print {
+ public:
+  virtual int available() = 0;
+  virtual int read() = 0;
+};
+
