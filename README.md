@@ -63,11 +63,19 @@ Defaults:
 
 - UART: Hub port C at 9600 baud
 - Steering motor: Hub port A
-- Steering travel: 45 degrees from center
+- Steering travel: measured automatically at startup
 - Xbox B button: stop and end the program
 
-Place the steering mechanism in its center position before starting the Hub
-program. Change `STEERING_DIRECTION` to `-1` if its direction is reversed.
+At startup, the Hub keeps Arduino drive output stopped, moves the steering to
+the left and right mechanical end stops at limited duty, calculates the
+midpoint, and centers the steering. Normal joystick control uses the measured
+limits with a 5-degree margin at each end. Change `STEERING_DIRECTION` to `-1`
+if the physical left/right direction is reversed.
+
+The calibration requires a completed steering mechanism with firm mechanical
+end stops. Do not run it with a loose or unloaded steering motor that can rotate
+continuously. Adjust `CALIBRATION_DUTY_LIMIT` only as high as needed for reliable
+stall detection; the default is 25%.
 
 ## UART wiring
 
