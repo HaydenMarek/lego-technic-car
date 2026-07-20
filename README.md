@@ -24,7 +24,8 @@ both drive motors. Steering is controlled exclusively by the Technic Hub.
 
 If no fresh drive or stop command arrives for more than 500 ms, the watchdog
 stops the vehicle. `PING` cannot keep stale throttle alive. `millis()` rollover
-is handled by unsigned subtraction.
+is handled by unsigned subtraction. Command refresh and timeout evaluation use
+the same loop timestamp to avoid false timeouts at millisecond boundaries.
 
 ## Bench test
 

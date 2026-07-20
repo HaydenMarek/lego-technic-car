@@ -40,11 +40,14 @@ class Application final {
   }
 
   void update() {
+    // Use one timestamp for command refresh, timeout evaluation, and ramping.
+    // Sampling again inside process() could produce a refresh time newer than
+    // this value and make unsigned timeout arithmetic look like a rollover.
     const uint32_t now = millis();
 
-    process(hubProtocol_);
+    process(hubProtocol_, now);
     if (Config::EnableMonitorCommands) {
-      process(monitorProtocol_);
+      process(monitorProtocol_, now);
     }
 
     if (watchdog_.update(now)) {
@@ -58,7 +61,7 @@ class Application final {
   }
 
  private:
-  void process(Protocol& protocol) {
+  void process(Protocol& protocol, uint32_t now) {
     DriverCommand command;
     while (protocol.poll(command)) {
       switch (command.type) {
@@ -72,13 +75,13 @@ class Application final {
 
         case CommandType::Stop:
           vehicle_.stop();
-          watchdog_.refresh(millis());
+          watchdog_.refresh(now);
           protocol.sendStopAcknowledgement();
           break;
 
         case CommandType::Drive:
           vehicle_.setThrottle(command.throttle);
-          watchdog_.refresh(millis());
+          watchdog_.refresh(now);
           protocol.sendDriveAcknowledgement(command);
           break;
 

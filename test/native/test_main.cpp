@@ -153,6 +153,7 @@ void watchdogTimesOutOnceAndHandlesClockRollover() {
 
   watchdog.refresh(100);
   assert(!watchdog.isTimedOut());
+  assert(!watchdog.update(100));
   assert(!watchdog.update(600));
   assert(watchdog.update(601));
   assert(watchdog.isTimedOut());
