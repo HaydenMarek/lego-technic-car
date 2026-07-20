@@ -7,7 +7,7 @@ from pybricks.pupdevices import Motor
 from pybricks.tools import run_task, wait
 
 
-UART_PORT = Port.D
+UART_PORT = Port.C
 STEERING_MOTOR_PORT = Port.A
 
 UART_BAUD = 9600

@@ -1,7 +1,7 @@
 # LEGO Technic RC Vehicle Controller
 
-Phase 1 firmware for an Arduino UNO acting as the vehicle controller between a
-LEGO Technic Hub and two future BTS7960 motor drivers.
+Firmware for an Arduino UNO acting as the vehicle controller between a LEGO
+Technic Hub and two BTS7960 motor drivers.
 
 The Technic Hub owns the Xbox controller and Powered Up steering motor. The
 UART protocol carries throttle intent to the Arduino and deliberately contains
@@ -31,10 +31,8 @@ Build and upload with PlatformIO:
 
 ```sh
 pio run -e uno_bench
-pio run -e uno_bench --target upload
 pio run -e uno_bench --target upload --upload-port /dev/ttyUSB0
-pio device monitor
-io device monitor --port /dev/ttyUSB0 --baud 115200 --eol LF --echo
+pio device monitor --port /dev/ttyUSB0 --baud 115200 --eol LF --echo
 ```
 
 The monitor is configured for 115200 baud. Set its line ending to LF, then try:
@@ -63,7 +61,7 @@ the left joystick, and sends only `D,<throttle>` to the Arduino.
 
 Defaults:
 
-- UART: Hub port D at 9600 baud
+- UART: Hub port C at 9600 baud
 - Steering motor: Hub port A
 - Steering travel: 45 degrees from center
 - Xbox B button: stop and end the program
@@ -75,6 +73,7 @@ program. Change `STEERING_DIRECTION` to `-1` if its direction is reversed.
 
 The proven SoftwareSerial connection is retained:
 
+- Technic Hub Powered Up port C: UART connection
 - Arduino pin 10: RX from Technic Hub
 - Arduino pin 11: TX to Technic Hub
 - UART baud: 9600
@@ -148,5 +147,5 @@ If a motor turns backward, change its corresponding `InvertLeftMotor` or
 - `MotorDriver`: ramping, immediate shutdown, PWM, and BTS7960 output boundary
 - `Watchdog`: independent command timeout detection
 
-BTS7960 pins, PWM, ramping, telemetry, and the future binary protocol remain
-intentionally outside this phase.
+Battery monitoring, current and temperature sensing, telemetry, and the future
+binary protocol remain intentionally outside this phase.
