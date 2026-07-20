@@ -1,4 +1,4 @@
-"""Production Pybricks program for the LEGO Technic RC car."""
+"""Xbox, steering, UART, and failsafe smoke test for uno_bench firmware."""
 
 from pybricks.hubs import TechnicHub
 from pybricks.iodevices import UARTDevice, XboxController
@@ -12,19 +12,15 @@ STEERING_MOTOR_PORT = Port.A
 
 UART_BAUD = 9600
 CONTROL_PERIOD_MS = 50
-ARM_TRIGGER_MAX = 2
 
-# Startup steering calibration settings.
 CALIBRATION_SPEED = 150
 CALIBRATION_DUTY_LIMIT = 25
 CALIBRATION_SETTLE_MS = 250
 CENTERING_SPEED = 200
-
-# Keep normal steering slightly away from the detected hard stops.
 STEERING_END_MARGIN = 5
 MIN_STEERING_TRAVEL = 20
 
-# Change to -1 if the steering direction is reversed.
+# Change to -1 if the physical steering direction is reversed.
 STEERING_DIRECTION = 1
 
 
@@ -37,17 +33,15 @@ uart = UARTDevice(
 )
 
 steering_motor = Motor(STEERING_MOTOR_PORT)
-
-# The program waits here until the Xbox controller connects.
 controller = XboxController()
 
 
-async def require_motor_firmware():
-    """Refuse to arm unless Arduino has BTS7960 output enabled."""
+async def require_bench_firmware():
+    """Refuse to run if Arduino has real motor outputs enabled."""
 
     uart.clear()
     await uart.write("MODE\n")
-    await uart.wait_until(b"MODE,BTS7960")
+    await uart.wait_until(b"MODE,BENCH")
     uart.clear()
 
 
@@ -80,8 +74,6 @@ async def calibrate_steering():
     if negative_limit >= 0 or positive_limit <= 0:
         raise RuntimeError("Steering calibration limits are invalid")
 
-    # Move to the measured midpoint using the original angle reference, then
-    # redefine that position as zero for normal steering control.
     await steering_motor.run_target(
         CENTERING_SPEED,
         center,
@@ -93,57 +85,18 @@ async def calibrate_steering():
 
 
 def steering_target(joystick, negative_limit, positive_limit):
-    """Map joystick percentage onto the independently measured limits."""
-
     directed = joystick * STEERING_DIRECTION
     if directed < 0:
         return negative_limit * (-directed) // 100
     return positive_limit * directed // 100
 
 
-async def wait_for_arm(negative_limit, positive_limit):
-    """Keep drive stopped until A is newly pressed with neutral triggers."""
-
-    a_was_pressed = Button.A in controller.buttons.pressed()
-
-    while True:
-        buttons = controller.buttons.pressed()
-        if Button.B in buttons:
-            return False
-
-        left_trigger, right_trigger = controller.triggers()
-        steering, _ = controller.joystick_left()
-
-        target = steering_target(
-            int(steering),
-            negative_limit,
-            positive_limit,
-        )
-        steering_motor.track_target(target)
-
-        # Repeated STOP packets make the unarmed state explicit.
-        await uart.write("STOP\n")
-        await wait(CONTROL_PERIOD_MS)
-        uart.read_all()
-
-        a_pressed = Button.A in buttons
-        triggers_are_neutral = (
-            left_trigger <= ARM_TRIGGER_MAX
-            and right_trigger <= ARM_TRIGGER_MAX
-        )
-        if a_pressed and not a_was_pressed and triggers_are_neutral:
-            return True
-
-        a_was_pressed = a_pressed
-
-
 async def main():
     calibrated = False
 
     try:
-        await require_motor_firmware()
+        await require_bench_firmware()
 
-        # Drive output stays disabled while the steering mechanism calibrates.
         await uart.write("STOP\n")
         await wait(100)
         uart.read_all()
@@ -151,41 +104,26 @@ async def main():
         negative_limit, positive_limit = await calibrate_steering()
         calibrated = True
 
-        # A must be released and newly pressed while both triggers are neutral.
-        if not await wait_for_arm(negative_limit, positive_limit):
-            return
-
         while True:
-            # Press B to stop the vehicle and end the program.
             if Button.B in controller.buttons.pressed():
                 break
 
             left_trigger, right_trigger = controller.triggers()
             steering, _ = controller.joystick_left()
 
-            # Right trigger drives forward; left trigger drives backward.
             throttle = int(right_trigger - left_trigger)
-            steering = int(steering)
-
-            # Steering is owned entirely by the Technic Hub and constrained to
-            # the safe limits measured during startup calibration.
             target = steering_target(
-                steering,
+                int(steering),
                 negative_limit,
                 positive_limit,
             )
-            steering_motor.track_target(target)
 
-            # The Arduino receives throttle only.
+            steering_motor.track_target(target)
             await uart.write("D,{0}\n".format(throttle))
             await wait(CONTROL_PERIOD_MS)
-
-            # Drain acknowledgements so the UART receive buffer cannot fill.
             uart.read_all()
 
     finally:
-        # Center the steering and attempt an orderly drive stop. The Arduino
-        # watchdog remains the independent fallback if UART communication fails.
         if calibrated:
             steering_motor.track_target(0)
         else:

@@ -50,6 +50,12 @@ void Protocol::sendReady() { transport_.println(F("READY")); }
 
 void Protocol::sendPong() { transport_.println(F("PONG")); }
 
+void Protocol::sendMode() {
+  transport_.println(Config::EnableBts7960Outputs
+                         ? F("MODE,BTS7960")
+                         : F("MODE,BENCH"));
+}
+
 void Protocol::sendStopAcknowledgement() {
   transport_.println(F("ACK,STOP"));
 }
@@ -64,6 +70,10 @@ void Protocol::sendError() { transport_.println(F("ERR")); }
 DriverCommand Protocol::parse(const char* packet) {
   if (strcmp(packet, "PING") == 0) {
     return {CommandType::Ping, 0};
+  }
+
+  if (strcmp(packet, "MODE") == 0) {
+    return {CommandType::Mode, 0};
   }
 
   if (strcmp(packet, "STOP") == 0) {

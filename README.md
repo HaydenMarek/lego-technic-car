@@ -14,6 +14,7 @@ Commands are ASCII lines terminated by `\n`:
 | Input | Response | Effect |
 | --- | --- | --- |
 | `PING` | `PONG` | Link test; does not refresh drive intent |
+| `MODE` | `MODE,BENCH` or `MODE,BTS7960` | Report active output backend |
 | `STOP` | `ACK,STOP` | Stop both motor targets and refresh the watchdog |
 | `D,<throttle>` | `ACK,D,<throttle>` | Apply throttle and refresh the watchdog |
 | Invalid input | `ERR` | No state change and no watchdog refresh |
@@ -39,6 +40,7 @@ The monitor is configured for 115200 baud. Set its line ending to LF, then try:
 
 ```text
 PING
+MODE
 D,50
 D,-25
 STOP
@@ -53,17 +55,47 @@ Pure control behavior also has host-side checks that need only a C++17 compiler:
 ./test/run-native-tests.sh
 ```
 
-## Technic Hub program
+## Program pairs
 
-The matching Pybricks program is in [`hub/main.py`](hub/main.py). It maps the
-Xbox triggers to throttle, controls the Powered Up steering motor directly from
-the left joystick, and sends only `D,<throttle>` to the Arduino.
+Two deliberately paired configurations prevent smoke-test and real-motor modes
+from being mixed accidentally. Each Hub program sends `MODE` at startup and
+refuses to continue unless Arduino reports the expected backend.
+
+### Smoke test
+
+- Hub: [`hub/smoke_test.py`](hub/smoke_test.py)
+- Arduino: `uno_bench`
+- Drive result: serial `MOTOR,...` diagnostics only
+
+```sh
+pio run -e uno_bench --target upload --upload-port /dev/ttyUSB0
+```
+
+### Real motors
+
+- Hub: [`hub/main.py`](hub/main.py)
+- Arduino: `uno_bts7960`
+- Drive result: PWM output to both BTS7960 modules
+
+```sh
+pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
+```
+
+The production Hub program verifies `MODE,BTS7960`, calibrates steering, then
+keeps sending `STOP` until both triggers are neutral and the Xbox A button is
+newly pressed. Xbox B stops and ends the program. The smoke-test Hub program
+similarly requires `MODE,BENCH` and never arms a hardware-enabled Arduino.
+
+Both Hub programs map Xbox triggers to throttle, control the Powered Up
+steering motor directly from the left joystick, and send only `D,<throttle>`
+to the Arduino.
 
 Defaults:
 
 - UART: Hub port C at 9600 baud
 - Steering motor: Hub port A
 - Steering travel: measured automatically at startup
+- Xbox A button: arm production drive after calibration
 - Xbox B button: stop and end the program
 
 At startup, the Hub keeps Arduino drive output stopped, moves the steering to

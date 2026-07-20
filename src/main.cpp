@@ -35,7 +35,7 @@ class Application final {
     Serial.println(Config::EnableBts7960Outputs
                        ? F("Motor output: BTS7960")
                        : F("Motor output: serial bench mode"));
-    Serial.println(F("Commands: PING | STOP | D,<throttle>"));
+    Serial.println(F("Commands: PING | MODE | STOP | D,<throttle>"));
     hubProtocol_.sendReady();
   }
 
@@ -64,6 +64,10 @@ class Application final {
       switch (command.type) {
         case CommandType::Ping:
           protocol.sendPong();
+          break;
+
+        case CommandType::Mode:
+          protocol.sendMode();
           break;
 
         case CommandType::Stop:

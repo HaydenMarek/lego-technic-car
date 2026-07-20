@@ -43,10 +43,13 @@ void protocolAcceptsIntentCommandsAndRejectsMalformedInput() {
   Protocol protocol(stream);
   DriverCommand command;
 
-  stream.receive("PING\r\nD,-100\nD,101\nD,1,2\n");
+  stream.receive("PING\r\nMODE\nD,-100\nD,101\nD,1,2\n");
 
   assert(protocol.poll(command));
   assert(command.type == CommandType::Ping);
+
+  assert(protocol.poll(command));
+  assert(command.type == CommandType::Mode);
 
   assert(protocol.poll(command));
   assert(command.type == CommandType::Drive);
@@ -82,12 +85,13 @@ void protocolWritesStableReplies() {
 
   protocol.sendReady();
   protocol.sendPong();
+  protocol.sendMode();
   protocol.sendStopAcknowledgement();
   protocol.sendDriveAcknowledgement(drive);
   protocol.sendError();
 
   assert(stream.output() ==
-         "READY\nPONG\nACK,STOP\nACK,D,50\nERR\n");
+         "READY\nPONG\nMODE,BENCH\nACK,STOP\nACK,D,50\nERR\n");
 }
 
 void vehicleAppliesThrottleToBothMotorsAndStops() {

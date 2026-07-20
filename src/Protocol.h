@@ -7,6 +7,7 @@
 enum class CommandType : uint8_t {
   Invalid,
   Ping,
+  Mode,
   Stop,
   Drive,
 };
@@ -24,6 +25,7 @@ class Protocol final {
 
   void sendReady();
   void sendPong();
+  void sendMode();
   void sendStopAcknowledgement();
   void sendDriveAcknowledgement(const DriverCommand& command);
   void sendError();
