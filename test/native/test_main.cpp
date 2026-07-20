@@ -90,20 +90,26 @@ void protocolWritesStableReplies() {
   protocol.sendDriveAcknowledgement(drive);
   protocol.sendError();
 
-  assert(stream.output() ==
-         "READY\nPONG\nMODE,BENCH\nACK,STOP\nACK,D,50\nERR\n");
+  std::string expected = "READY\nPONG\n";
+  expected += Config::EnableBts7960Outputs
+                  ? "MODE,BTS7960_SINGLE\n"
+                  : "MODE,BENCH\n";
+  expected += "ACK,STOP\nACK,D,50\nERR\n";
+  assert(stream.output() == expected);
 }
 
 void vehicleAppliesThrottleToBothMotorsAndStops() {
   FakeStream diagnostics;
   MotorDriver motorDriver(diagnostics);
   Vehicle vehicle(motorDriver);
+  constexpr bool expectRightOutput =
+      !Config::EnableBts7960Outputs || Config::EnableRightBridge;
 
   motorDriver.begin(0);
   vehicle.setThrottle(50);
   assert(vehicle.throttle() == 50);
   assert(motorDriver.leftTarget() == 50);
-  assert(motorDriver.rightTarget() == 50);
+  assert(motorDriver.rightTarget() == (expectRightOutput ? 50 : 0));
   assert(motorDriver.leftApplied() == 0);
   assert(motorDriver.rightApplied() == 0);
 
@@ -112,16 +118,16 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
 
   motorDriver.update(20);
   assert(motorDriver.leftApplied() == 5);
-  assert(motorDriver.rightApplied() == 5);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? 5 : 0));
 
   motorDriver.update(200);
   assert(motorDriver.leftApplied() == 50);
-  assert(motorDriver.rightApplied() == 50);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? 50 : 0));
 
   vehicle.setThrottle(-50);
   motorDriver.update(380);
   assert(motorDriver.leftApplied() == 5);
-  assert(motorDriver.rightApplied() == 5);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? 5 : 0));
 
   motorDriver.update(400);
   assert(motorDriver.leftApplied() == 0);
@@ -129,7 +135,7 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
 
   motorDriver.update(420);
   assert(motorDriver.leftApplied() == -5);
-  assert(motorDriver.rightApplied() == -5);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? -5 : 0));
 
   vehicle.stop();
   assert(vehicle.throttle() == 0);

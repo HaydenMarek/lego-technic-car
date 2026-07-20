@@ -6,6 +6,10 @@
 #define TECHNIC_RC_ENABLE_BTS7960 0
 #endif
 
+#ifndef TECHNIC_RC_ENABLE_RIGHT_BRIDGE
+#define TECHNIC_RC_ENABLE_RIGHT_BRIDGE 0
+#endif
+
 namespace Config {
 
 struct Bts7960Pins {
@@ -27,6 +31,9 @@ constexpr Bts7960Pins LeftBridgePins{5, 6, 2, 4};
 constexpr Bts7960Pins RightBridgePins{9, 3, 7, 8};
 
 constexpr bool EnableBts7960Outputs = TECHNIC_RC_ENABLE_BTS7960 != 0;
+constexpr bool EnableLeftBridge = EnableBts7960Outputs;
+constexpr bool EnableRightBridge =
+    EnableBts7960Outputs && TECHNIC_RC_ENABLE_RIGHT_BRIDGE != 0;
 constexpr bool InvertLeftMotor = false;
 constexpr bool InvertRightMotor = false;
 

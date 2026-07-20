@@ -51,9 +51,13 @@ void Protocol::sendReady() { transport_.println(F("READY")); }
 void Protocol::sendPong() { transport_.println(F("PONG")); }
 
 void Protocol::sendMode() {
-  transport_.println(Config::EnableBts7960Outputs
-                         ? F("MODE,BTS7960")
-                         : F("MODE,BENCH"));
+  if constexpr (!Config::EnableBts7960Outputs) {
+    transport_.println(F("MODE,BENCH"));
+  } else if constexpr (Config::EnableRightBridge) {
+    transport_.println(F("MODE,BTS7960_DUAL"));
+  } else {
+    transport_.println(F("MODE,BTS7960_SINGLE"));
+  }
 }
 
 void Protocol::sendStopAcknowledgement() {

@@ -7,6 +7,7 @@ void MotorDriver::begin(uint32_t now) {
 
   if constexpr (Config::EnableBts7960Outputs) {
     configureBridge(Config::LeftBridgePins);
+    // Keep the unused module disabled in single-bridge builds too.
     configureBridge(Config::RightBridgePins);
   }
 
@@ -15,7 +16,12 @@ void MotorDriver::begin(uint32_t now) {
 
 void MotorDriver::setTargets(int16_t left, int16_t right) {
   leftTarget_ = clamp(left);
-  rightTarget_ = clamp(right);
+  if constexpr (Config::EnableBts7960Outputs &&
+                !Config::EnableRightBridge) {
+    rightTarget_ = 0;
+  } else {
+    rightTarget_ = clamp(right);
+  }
 }
 
 void MotorDriver::update(uint32_t now) {
@@ -135,9 +141,11 @@ void MotorDriver::writeBridge(const Config::Bts7960Pins& pins,
 }
 
 void MotorDriver::writeOutputs() {
-  if constexpr (Config::EnableBts7960Outputs) {
+  if constexpr (Config::EnableLeftBridge) {
     writeBridge(
         Config::LeftBridgePins, leftApplied_, Config::InvertLeftMotor);
+  }
+  if constexpr (Config::EnableRightBridge) {
     writeBridge(
         Config::RightBridgePins, rightApplied_, Config::InvertRightMotor);
   }

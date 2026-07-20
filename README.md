@@ -14,7 +14,7 @@ Commands are ASCII lines terminated by `\n`:
 | Input | Response | Effect |
 | --- | --- | --- |
 | `PING` | `PONG` | Link test; does not refresh drive intent |
-| `MODE` | `MODE,BENCH` or `MODE,BTS7960` | Report active output backend |
+| `MODE` | `MODE,BENCH`, `MODE,BTS7960_SINGLE`, or `MODE,BTS7960_DUAL` | Report active output backend |
 | `STOP` | `ACK,STOP` | Stop both motor targets and refresh the watchdog |
 | `D,<throttle>` | `ACK,D,<throttle>` | Apply throttle and refresh the watchdog |
 | Invalid input | `ERR` | No state change and no watchdog refresh |
@@ -71,7 +71,23 @@ refuses to continue unless Arduino reports the expected backend.
 pio run -e uno_bench --target upload --upload-port /dev/ttyUSB0
 ```
 
-### Real motors
+### One-bridge commissioning
+
+- Hub: [`hub/single_bridge.py`](hub/single_bridge.py)
+- Arduino: `uno_bts7960_single`
+- Active drive output: left BTS7960 only
+- Throttle cap: 30% for initial testing
+
+```sh
+pio run -e uno_bts7960_single --target upload --upload-port /dev/ttyUSB0
+```
+
+Connect only the left bridge control pins and one unloaded motor for this test.
+The right bridge target and hardware output remain forced to zero. The Hub
+program requires `MODE,BTS7960_SINGLE`, successful steering calibration,
+neutral triggers, and a new A-button press before it sends throttle.
+
+### Two-bridge operation
 
 - Hub: [`hub/main.py`](hub/main.py)
 - Arduino: `uno_bts7960`
@@ -81,7 +97,7 @@ pio run -e uno_bench --target upload --upload-port /dev/ttyUSB0
 pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 ```
 
-The production Hub program verifies `MODE,BTS7960`, calibrates steering, then
+The two-bridge Hub program verifies `MODE,BTS7960_DUAL`, calibrates steering, then
 keeps sending `STOP` until both triggers are neutral and the Xbox A button is
 newly pressed. Xbox B stops and ends the program. The smoke-test Hub program
 similarly requires `MODE,BENCH` and never arms a hardware-enabled Arduino.
@@ -124,10 +140,12 @@ connection; do not assume the Hub UART pins are 5 V tolerant.
 
 ## BTS7960 drive output
 
-The default `uno_bench` environment only prints simulated motor output. The
-separate hardware environment enables both BTS7960 bridges:
+The default `uno_bench` environment only prints simulated motor output. Use
+`uno_bts7960_single` to enable only the left bridge, or `uno_bts7960` to enable
+both bridges:
 
 ```sh
+pio run -e uno_bts7960_single
 pio run -e uno_bts7960
 pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 ```
@@ -138,6 +156,43 @@ timeout, and startup always set both PWM inputs to zero and pull both enable
 inputs low immediately.
 
 ### UNO to BTS7960 control wiring
+
+For the initial `uno_bts7960_single` test, connect only the left module:
+
+```text
+                         ONE BTS7960 / IBT-2 MODULE
+
+ Arduino D5  ----------------------------------> RPWM
+ Arduino D6  ----------------------------------> LPWM
+ Arduino D2  ----------------------------------> R_EN
+ Arduino D4  ----------------------------------> L_EN
+ Arduino 5V  ----------------------------------> VCC   (logic power only)
+ Arduino GND ----------------------------------> GND
+       │
+       └------------------- common ground ------ B- <--- 2S battery negative
+
+ 2S battery positive --- fuse --- switch ------> B+
+
+ Buggy motor wire 1 ----------------------------> M+
+ Buggy motor wire 2 ----------------------------> M-
+
+ R_IS and L_IS: leave disconnected for now.
+```
+
+The module normally has two high-current screw-terminal pairs:
+
+| BTS7960 terminal | Connect to |
+| --- | --- |
+| `B+` | 2S battery positive through the fuse and main switch |
+| `B-` | 2S battery negative/common ground |
+| `M+` | First buggy-motor wire |
+| `M-` | Second buggy-motor wire |
+
+Terminal order varies between clone boards, so follow the labels printed on
+your exact PCB rather than assuming left-to-right order. `B+` and `B-` are the
+battery input; `M+` and `M-` are the motor output. Reversing the two motor wires
+only reverses motor direction, but reversing battery polarity can destroy the
+module.
 
 | Module | BTS7960 pin | Arduino UNO pin |
 | --- | --- | --- |
@@ -152,10 +207,10 @@ inputs low immediately.
 | Both | `VCC` | Arduino 5 V logic supply |
 | Both | `GND` | Arduino GND/common signal ground |
 
-For each module, connect one buggy motor to its motor output terminals. Feed
-the module power terminals directly from the fused 2S motor-power distribution,
-using appropriately rated wire and connectors. Do not connect motor battery
-positive to the Arduino 5 V pin.
+Feed the module power terminals directly from the fused 2S motor-power
+distribution using appropriately rated wire and connectors. Do not connect
+motor battery positive to the Arduino `5V`, `VIN`, or logic `VCC` connection.
+For the first test, power the UNO from USB; only the grounds are joined.
 
 During reset, Arduino pins are inputs. Add a 10 kΩ pull-down from each `R_EN`
 and `L_EN` line to ground unless the exact module is verified to provide them,
