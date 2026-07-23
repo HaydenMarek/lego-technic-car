@@ -168,10 +168,29 @@ pio run -e uno_bts7960
 pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 ```
 
-The motor output ramps by 5 percentage points every 20 ms, reaching full output
-in 400 ms. A direction reversal ramps through zero. `STOP`, invalid connection
-timeout, and startup always set both PWM inputs to zero and pull both enable
-inputs low immediately.
+The motor output ramps in three phases instead of a single rate:
+
+| Phase | Rate | 0..100 / 100..0 time |
+| --- | --- | --- |
+| Acceleration | `MotorAccelStep` = 5%/20 ms | 400 ms |
+| Deceleration | `MotorDecelStep` = 10%/20 ms | 200 ms |
+| Reversal dwell | `MotorReversalDwellMs` = 60 ms at zero | dead-time |
+
+Acceleration is slower than deceleration, so the car spools up gently but
+releases throttle and brakes promptly. A direction reversal decelerates to
+zero with the fast decel step, then holds at zero for the reversal dwell
+before ramping the opposite way, which avoids snapping the drivetrain
+backward. The dwell is abandoned early if the driver returns the throttle to
+neutral or reverses their choice, so the car stays responsive.
+
+Optional dynamic braking is available for driver neutral. When enabled
+(`-DTECHNIC_RC_ENABLE_DYNAMIC_BRAKING=1`), the bridge shorts the motor at
+zero output to oppose back-EMF instead of coasting, shortening stopping
+distance for performance driving. This applies only to driver neutral (the
+throttle ramping to zero); `STOP`, the command-timeout failsafe, and startup
+always set both PWM inputs to zero and pull both enable inputs low
+immediately (coast), regardless of the braking setting, for safety. This
+mirrors the coast/brake/hold distinction Pybricks exposes on motors.
 
 ### UNO to BTS7960 control wiring
 
@@ -257,7 +276,8 @@ If a motor turns backward, change its corresponding `InvertLeftMotor` or
 
 - `Protocol`: line framing, validation, commands, and replies
 - `Vehicle`: current throttle intent and high-level stop behavior
-- `MotorDriver`: ramping, immediate shutdown, PWM, and BTS7960 output boundary
+- `MotorDriver`: split ramping (acceleration/deceleration/reversal dwell),
+  optional dynamic braking, immediate shutdown, PWM, and BTS7960 output boundary
 - `Watchdog`: independent command timeout detection
 
 Battery monitoring, current and temperature sensing, telemetry, and the future

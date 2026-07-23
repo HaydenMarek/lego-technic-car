@@ -17,6 +17,13 @@
 #define TECHNIC_RC_ACK_DRIVE_COMMANDS 0
 #endif
 
+// Optional dynamic braking at driver neutral. When enabled, the bridge shorts
+// the motor at zero output to oppose back-EMF instead of coasting. STOP,
+// failsafe, and startup always coast for safety regardless of this setting.
+#ifndef TECHNIC_RC_ENABLE_DYNAMIC_BRAKING
+#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 0
+#endif
+
 namespace Config {
 
 struct Bts7960Pins {
@@ -46,13 +53,19 @@ constexpr bool EnableRightBridge =
 // Disabled by default: the reply blocks SoftwareSerial TX (and therefore RX)
 // for ~9 ms at 9600 baud, which prevents reliable 20 ms control frames.
 constexpr bool AcknowledgeDriveCommands = TECHNIC_RC_ACK_DRIVE_COMMANDS != 0;
+constexpr bool EnableDynamicBraking = TECHNIC_RC_ENABLE_DYNAMIC_BRAKING != 0;
 
 constexpr bool InvertLeftMotor = false;
 constexpr bool InvertRightMotor = false;
 
-// Five percentage points every 20 ms reaches full output in 400 ms.
+// Motor ramp. Acceleration is slower than deceleration so the car spools up
+// gently but releases throttle and brakes promptly. A direction reversal
+// decelerates to zero, then holds there for a short dead-time (dwell) before
+// ramping the opposite way, which avoids snapping the drivetrain backward.
 constexpr uint32_t MotorRampIntervalMs = 20;
-constexpr int16_t MotorRampStep = 5;
+constexpr int16_t MotorAccelStep = 5;     // 5%/20 ms  -> 400 ms 0..100
+constexpr int16_t MotorDecelStep = 10;    // 10%/20 ms -> 200 ms 100..0
+constexpr uint32_t MotorReversalDwellMs = 60;  // dead-time at zero on reversal
 
 constexpr int16_t ThrottleMinimum = -100;
 constexpr int16_t ThrottleMaximum = 100;

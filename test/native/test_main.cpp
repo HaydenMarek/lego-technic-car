@@ -91,9 +91,13 @@ void protocolWritesStableReplies() {
   protocol.sendError();
 
   std::string expected = "READY\nPONG\n";
-  expected += Config::EnableBts7960Outputs
-                  ? "MODE,BTS7960_SINGLE\n"
-                  : "MODE,BENCH\n";
+  if constexpr (Config::EnableRightBridge) {
+    expected += "MODE,BTS7960_DUAL\n";
+  } else if constexpr (Config::EnableBts7960Outputs) {
+    expected += "MODE,BTS7960_SINGLE\n";
+  } else {
+    expected += "MODE,BENCH\n";
+  }
   expected += "ACK,STOP\nACK,D,50\nERR\n";
   assert(stream.output() == expected);
 }
@@ -113,6 +117,7 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
   assert(motorDriver.leftApplied() == 0);
   assert(motorDriver.rightApplied() == 0);
 
+  // Acceleration uses the slower accel step: 5% per 20 ms.
   motorDriver.update(19);
   assert(motorDriver.leftApplied() == 0);
 
@@ -124,25 +129,68 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
   assert(motorDriver.leftApplied() == 50);
   assert(motorDriver.rightApplied() == (expectRightOutput ? 50 : 0));
 
+  // Reversal: decelerate to zero with the faster decel step (10%/20 ms), then
+  // hold at zero for the reversal dwell before accelerating backward.
   vehicle.setThrottle(-50);
   motorDriver.update(380);
-  assert(motorDriver.leftApplied() == 5);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? 5 : 0));
-
-  motorDriver.update(400);
   assert(motorDriver.leftApplied() == 0);
   assert(motorDriver.rightApplied() == 0);
+  assert(motorDriver.leftTarget() == -50);
+  assert(motorDriver.rightTarget() == (expectRightOutput ? -50 : 0));
 
+  // Reversal dwell holds at zero for MotorReversalDwellMs.
+  motorDriver.update(400);
+  assert(motorDriver.leftApplied() == 0);
   motorDriver.update(420);
+  assert(motorDriver.leftApplied() == 0);
+
+  // Dwell expires; accelerate backward with the accel step.
+  motorDriver.update(440);
   assert(motorDriver.leftApplied() == -5);
   assert(motorDriver.rightApplied() == (expectRightOutput ? -5 : 0));
 
+  motorDriver.update(640);
+  assert(motorDriver.leftApplied() == -50);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? -50 : 0));
+
+  // STOP forces an immediate coast regardless of dynamic braking.
   vehicle.stop();
   assert(vehicle.throttle() == 0);
   assert(motorDriver.leftTarget() == 0);
   assert(motorDriver.rightTarget() == 0);
   assert(motorDriver.leftApplied() == 0);
   assert(motorDriver.rightApplied() == 0);
+}
+
+void dynamicBrakingEngagesAtNeutralButNotAfterStop() {
+  // Only meaningful when dynamic braking and at least one bridge are enabled.
+  if constexpr (!Config::EnableDynamicBraking ||
+                !Config::EnableLeftBridge) {
+    return;
+  }
+
+  FakeStream diagnostics;
+  MotorDriver motorDriver(diagnostics);
+  Vehicle vehicle(motorDriver);
+
+  motorDriver.begin(0);
+  assert(!motorDriver.brakingActive());  // startup coasts
+
+  vehicle.setThrottle(50);
+  motorDriver.update(200);
+  assert(motorDriver.leftApplied() == 50);
+  assert(!motorDriver.brakingActive());  // driving, not braking
+
+  // Driver neutral: decelerate to zero, then the bridge shorts to brake.
+  vehicle.setThrottle(0);
+  motorDriver.update(400);
+  assert(motorDriver.leftApplied() == 0);
+  assert(motorDriver.brakingActive());
+
+  // STOP releases the brake into a coast for safety.
+  vehicle.stop();
+  assert(motorDriver.leftApplied() == 0);
+  assert(!motorDriver.brakingActive());
 }
 
 void watchdogTimesOutOnceAndHandlesClockRollover() {
@@ -171,6 +219,7 @@ int main() {
   protocolRecoversAfterOverflow();
   protocolWritesStableReplies();
   vehicleAppliesThrottleToBothMotorsAndStops();
+  dynamicBrakingEngagesAtNeutralButNotAfterStop();
   watchdogTimesOutOnceAndHandlesClockRollover();
   return 0;
 }
