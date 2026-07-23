@@ -82,7 +82,12 @@ class Application final {
         case CommandType::Drive:
           vehicle_.setThrottle(command.throttle);
           watchdog_.refresh(now);
-          protocol.sendDriveAcknowledgement(command);
+          // The drive ACK is suppressed by default. It travels back over the
+          // same half-duplex SoftwareSerial line and blocks receive for ~9 ms
+          // at 9600 baud, which prevents reliable 20 ms control frames.
+          if constexpr (Config::AcknowledgeDriveCommands) {
+            protocol.sendDriveAcknowledgement(command);
+          }
           break;
 
         case CommandType::Invalid:

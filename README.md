@@ -16,7 +16,7 @@ Commands are ASCII lines terminated by `\n`:
 | `PING` | `PONG` | Link test; does not refresh drive intent |
 | `MODE` | `MODE,BENCH`, `MODE,BTS7960_SINGLE`, or `MODE,BTS7960_DUAL` | Report active output backend |
 | `STOP` | `ACK,STOP` | Stop both motor targets and refresh the watchdog |
-| `D,<throttle>` | `ACK,D,<throttle>` | Apply throttle and refresh the watchdog |
+| `D,<throttle>` | none by default (optional `ACK,D,<throttle>`) | Apply throttle and refresh the watchdog |
 | Invalid input | `ERR` | No state change and no watchdog refresh |
 
 Throttle must be an integer from -100 to 100. The same target is applied to
@@ -26,6 +26,23 @@ If no fresh drive or stop command arrives for more than 500 ms, the watchdog
 stops the vehicle. `PING` cannot keep stale throttle alive. `millis()` rollover
 is handled by unsigned subtraction. Command refresh and timeout evaluation use
 the same loop timestamp to avoid false timeouts at millisecond boundaries.
+
+### Control latency
+
+The Hub sends drive intent every 20 ms (`CONTROL_PERIOD_MS` in the Pybricks
+programs). Per-frame drive acknowledgements are suppressed by default: the
+`ACK,D,<throttle>` reply travels back over the same half-duplex
+SoftwareSerial line and blocks receive for roughly 9 ms at 9600 baud, which
+prevents reliable 20 ms frames and can drop the next incoming command. The
+Arduino watchdog is still refreshed on every drive command, so failsafe does
+not depend on the reply. To re-enable the reply for link debugging, build with
+`-DTECHNIC_RC_ACK_DRIVE_COMMANDS=1`.
+
+`PING`, `MODE`, and `STOP` replies are unaffected; they are used for the
+startup handshake and the unarmed `STOP` loop, not for the high-rate drive
+path. The next latency step is to raise `Config::HubBaud` (and the matching
+`UART_BAUD` in each Hub program) above 9600; this needs on-hardware validation
+of the SoftwareSerial link, so it is kept at 9600 until tested.
 
 ## Bench test
 

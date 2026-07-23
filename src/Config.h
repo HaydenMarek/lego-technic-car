@@ -10,6 +10,13 @@
 #define TECHNIC_RC_ENABLE_RIGHT_BRIDGE 0
 #endif
 
+// Per-frame drive acknowledgements are suppressed by default so the
+// half-duplex SoftwareSerial link stays free to receive the next command.
+// Re-enable with -DTECHNIC_RC_ACK_DRIVE_COMMANDS=1 for link debugging.
+#ifndef TECHNIC_RC_ACK_DRIVE_COMMANDS
+#define TECHNIC_RC_ACK_DRIVE_COMMANDS 0
+#endif
+
 namespace Config {
 
 struct Bts7960Pins {
@@ -34,6 +41,12 @@ constexpr bool EnableBts7960Outputs = TECHNIC_RC_ENABLE_BTS7960 != 0;
 constexpr bool EnableLeftBridge = EnableBts7960Outputs;
 constexpr bool EnableRightBridge =
     EnableBts7960Outputs && TECHNIC_RC_ENABLE_RIGHT_BRIDGE != 0;
+
+// When true the Arduino replies ACK,D,<throttle> to every drive command.
+// Disabled by default: the reply blocks SoftwareSerial TX (and therefore RX)
+// for ~9 ms at 9600 baud, which prevents reliable 20 ms control frames.
+constexpr bool AcknowledgeDriveCommands = TECHNIC_RC_ACK_DRIVE_COMMANDS != 0;
+
 constexpr bool InvertLeftMotor = false;
 constexpr bool InvertRightMotor = false;
 

@@ -11,7 +11,9 @@ UART_PORT = Port.C
 STEERING_MOTOR_PORT = Port.A
 
 UART_BAUD = 9600
-CONTROL_PERIOD_MS = 50
+# 20 ms control frames. The Arduino suppresses per-frame drive ACKs,
+# so this loop is fire-and-forget; read_all() only drains stray bytes.
+CONTROL_PERIOD_MS = 20
 ARM_TRIGGER_MAX = 2
 
 # Startup steering calibration settings.
@@ -180,7 +182,8 @@ async def main():
             await uart.write("D,{0}\n".format(throttle))
             await wait(CONTROL_PERIOD_MS)
 
-            # Drain acknowledgements so the UART receive buffer cannot fill.
+            # Drive ACKs are suppressed; drain any stray bytes so the
+            # UART receive buffer cannot fill.
             uart.read_all()
 
     finally:

@@ -11,7 +11,9 @@ UART_PORT = Port.C
 STEERING_MOTOR_PORT = Port.A
 
 UART_BAUD = 9600
-CONTROL_PERIOD_MS = 50
+# 20 ms control frames. The Arduino suppresses per-frame drive ACKs,
+# so this loop is fire-and-forget; read_all() only drains stray bytes.
+CONTROL_PERIOD_MS = 20
 
 CALIBRATION_SPEED = 150
 CALIBRATION_DUTY_LIMIT = 25
