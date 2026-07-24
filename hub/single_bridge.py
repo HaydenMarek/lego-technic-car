@@ -6,7 +6,6 @@ from pybricks.parameters import Button, Port, Stop
 from pybricks.pupdevices import Motor
 from pybricks.tools import run_task, wait
 
-
 UART_PORT = Port.C
 STEERING_MOTOR_PORT = Port.A
 
@@ -15,9 +14,6 @@ UART_BAUD = 9600
 # so this loop is fire-and-forget; read_all() only drains stray bytes.
 CONTROL_PERIOD_MS = 20
 ARM_TRIGGER_MAX = 2
-
-# Limit the first real-motor tests to 30% output.
-MAX_THROTTLE = 100
 
 CALIBRATION_SPEED = 150
 CALIBRATION_DUTY_LIMIT = 25
@@ -39,7 +35,7 @@ uart = UARTDevice(
 )
 
 steering_motor = Motor(STEERING_MOTOR_PORT)
-controller = XboxController()
+controller = XboxController(connect=False)
 
 
 async def require_single_bridge_firmware():
@@ -95,11 +91,6 @@ def steering_target(joystick, negative_limit, positive_limit):
     return positive_limit * directed // 100
 
 
-def limited_throttle(left_trigger, right_trigger):
-    requested = int(right_trigger - left_trigger)
-    return max(-MAX_THROTTLE, min(MAX_THROTTLE, requested))
-
-
 async def wait_for_arm(negative_limit, positive_limit):
     a_was_pressed = Button.A in controller.buttons.pressed()
 
@@ -137,6 +128,8 @@ async def main():
     calibrated = False
 
     try:
+        await controller.connect()
+
         await require_single_bridge_firmware()
 
         await uart.write("STOP\n")
@@ -156,7 +149,8 @@ async def main():
             left_trigger, right_trigger = controller.triggers()
             steering, _ = controller.joystick_left()
 
-            throttle = limited_throttle(left_trigger, right_trigger)
+            # Right trigger drives forward; left trigger drives backward.
+            throttle = int(right_trigger - left_trigger)
             target = steering_target(
                 int(steering),
                 negative_limit,
@@ -186,6 +180,5 @@ async def main():
             steering_motor.brake()
 
         uart.read_all()
-
 
 run_task(main())

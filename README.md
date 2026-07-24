@@ -94,7 +94,6 @@ pio run -e uno_bench --target upload --upload-port /dev/ttyUSB0
 - Hub: [`hub/single_bridge.py`](hub/single_bridge.py)
 - Arduino: `uno_bts7960_single`
 - Active drive output: left BTS7960 only
-- Throttle cap: 30% for initial testing
 
 ```sh
 pio run -e uno_bts7960_single --target upload --upload-port /dev/ttyUSB0
@@ -172,16 +171,19 @@ The motor output ramps in three phases instead of a single rate:
 
 | Phase | Rate | 0..100 / 100..0 time |
 | --- | --- | --- |
-| Acceleration | `MotorAccelStep` = 5%/20 ms | 400 ms |
+| Acceleration | `MotorAccelStep` = 100%/20 ms | one 20 ms tick |
 | Deceleration | `MotorDecelStep` = 10%/20 ms | 200 ms |
-| Reversal dwell | `MotorReversalDwellMs` = 60 ms at zero | dead-time |
+| Reversal dwell | `MotorReversalDwellMs` = 0 ms at zero | none |
 
-Acceleration is slower than deceleration, so the car spools up gently but
-releases throttle and brakes promptly. A direction reversal decelerates to
-zero with the fast decel step, then holds at zero for the reversal dwell
-before ramping the opposite way, which avoids snapping the drivetrain
-backward. The dwell is abandoned early if the driver returns the throttle to
-neutral or reverses their choice, so the car stays responsive.
+Acceleration is maximally aggressive so the car snaps to the commanded
+throttle within a single 20 ms tick (useful for initiating drifts), and the
+reversal dwell is removed so the throttle can be flicked back and forth with
+no dead-time at zero. Deceleration stays prompt so throttle is released and
+brakes applied quickly. A direction reversal still decelerates to zero with
+the fast decel step before ramping the opposite way, which avoids snapping the
+drivetrain backward. The (zero-length) dwell is abandoned early if the driver
+returns the throttle to neutral or reverses their choice, so the car stays
+responsive.
 
 Optional dynamic braking is available for driver neutral. When enabled
 (`-DTECHNIC_RC_ENABLE_DYNAMIC_BRAKING=1`), the bridge shorts the motor at

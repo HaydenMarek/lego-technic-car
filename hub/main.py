@@ -6,7 +6,6 @@ from pybricks.parameters import Button, Port, Stop
 from pybricks.pupdevices import Motor
 from pybricks.tools import run_task, wait
 
-
 UART_PORT = Port.C
 STEERING_MOTOR_PORT = Port.A
 
@@ -40,7 +39,8 @@ uart = UARTDevice(
 
 steering_motor = Motor(STEERING_MOTOR_PORT)
 
-# The program waits here until the Xbox controller connects.
+# The program waits here until the Xbox controller connects (pairing happens
+# on the first run; on later runs the controller auto-connects).
 controller = XboxController()
 
 
@@ -206,6 +206,5 @@ async def main():
             steering_motor.brake()
 
         uart.read_all()
-
 
 run_task(main())

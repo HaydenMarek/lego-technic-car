@@ -58,14 +58,17 @@ constexpr bool EnableDynamicBraking = TECHNIC_RC_ENABLE_DYNAMIC_BRAKING != 0;
 constexpr bool InvertLeftMotor = false;
 constexpr bool InvertRightMotor = false;
 
-// Motor ramp. Acceleration is slower than deceleration so the car spools up
-// gently but releases throttle and brakes promptly. A direction reversal
-// decelerates to zero, then holds there for a short dead-time (dwell) before
-// ramping the opposite way, which avoids snapping the drivetrain backward.
+// Motor ramp. Acceleration is maximally aggressive so the car snaps to the
+// commanded throttle within a single 20 ms tick (for initiating drifts), and
+// the reversal dwell is removed so throttle can be flicked back and forth with
+// no dead-time at zero. Deceleration stays prompt so throttle is released and
+// brakes applied quickly. A direction reversal still decelerates to zero with
+// the fast decel step before ramping the opposite way, which avoids snapping the
+// drivetrain backward.
 constexpr uint32_t MotorRampIntervalMs = 20;
-constexpr int16_t MotorAccelStep = 5;     // 5%/20 ms  -> 400 ms 0..100
+constexpr int16_t MotorAccelStep = 100;   // 100%/20 ms -> 0..100 in one tick
 constexpr int16_t MotorDecelStep = 10;    // 10%/20 ms -> 200 ms 100..0
-constexpr uint32_t MotorReversalDwellMs = 60;  // dead-time at zero on reversal
+constexpr uint32_t MotorReversalDwellMs = 0;   // no dead-time at zero (drift)
 
 constexpr int16_t ThrottleMinimum = -100;
 constexpr int16_t ThrottleMaximum = 100;

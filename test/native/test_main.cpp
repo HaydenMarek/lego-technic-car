@@ -117,20 +117,22 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
   assert(motorDriver.leftApplied() == 0);
   assert(motorDriver.rightApplied() == 0);
 
-  // Acceleration uses the slower accel step: 5% per 20 ms.
+  // Acceleration is maximally aggressive: 100% per 20 ms, so a single tick
+  // snaps to the commanded throttle.
   motorDriver.update(19);
   assert(motorDriver.leftApplied() == 0);
 
   motorDriver.update(20);
-  assert(motorDriver.leftApplied() == 5);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? 5 : 0));
+  assert(motorDriver.leftApplied() == 50);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? 50 : 0));
 
   motorDriver.update(200);
   assert(motorDriver.leftApplied() == 50);
   assert(motorDriver.rightApplied() == (expectRightOutput ? 50 : 0));
 
-  // Reversal: decelerate to zero with the faster decel step (10%/20 ms), then
-  // hold at zero for the reversal dwell before accelerating backward.
+  // Reversal: decelerate to zero with the faster decel step (10%/20 ms) in one
+  // tick, then, with the reversal dwell removed, snap straight to the opposite
+  // target on the next tick.
   vehicle.setThrottle(-50);
   motorDriver.update(380);
   assert(motorDriver.leftApplied() == 0);
@@ -138,16 +140,11 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
   assert(motorDriver.leftTarget() == -50);
   assert(motorDriver.rightTarget() == (expectRightOutput ? -50 : 0));
 
-  // Reversal dwell holds at zero for MotorReversalDwellMs.
+  // No reversal dwell: the next tick accelerates backward with the aggressive
+  // accel step, reaching the target within a single 20 ms tick.
   motorDriver.update(400);
-  assert(motorDriver.leftApplied() == 0);
-  motorDriver.update(420);
-  assert(motorDriver.leftApplied() == 0);
-
-  // Dwell expires; accelerate backward with the accel step.
-  motorDriver.update(440);
-  assert(motorDriver.leftApplied() == -5);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? -5 : 0));
+  assert(motorDriver.leftApplied() == -50);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? -50 : 0));
 
   motorDriver.update(640);
   assert(motorDriver.leftApplied() == -50);

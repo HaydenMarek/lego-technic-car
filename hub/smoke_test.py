@@ -6,7 +6,6 @@ from pybricks.parameters import Button, Port, Stop
 from pybricks.pupdevices import Motor
 from pybricks.tools import run_task, wait
 
-
 UART_PORT = Port.C
 STEERING_MOTOR_PORT = Port.A
 
@@ -143,6 +142,5 @@ async def main():
             steering_motor.brake()
 
         uart.read_all()
-
 
 run_task(main())
