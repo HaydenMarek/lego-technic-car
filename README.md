@@ -131,16 +131,36 @@ stall detection; the default is 25%.
 
 ## UART wiring
 
-The proven SoftwareSerial connection is retained:
+The proven SoftwareSerial connection is retained at 9600 baud. Only three
+Powered Up port C contacts are used:
 
-- Technic Hub Powered Up port C: UART connection
-- Arduino pin 10: RX from Technic Hub
-- Arduino pin 11: TX to Technic Hub
-- UART baud: 9600
+| Powered Up port C pin | Function | Arduino UNO |
+| --- | --- | --- |
+| 3 | GND | GND (common ground) |
+| 5 | Hub TX, 3.3 V | D10 (RX), direct |
+| 6 | Hub RX, 3.3 V | D11 (TX), via 5 V->3.3 V divider |
 
-The two devices must share a signal ground. Verify the Powered Up port signal
-voltage and use appropriate level shifting before making the physical
-connection; do not assume the Hub UART pins are 5 V tolerant.
+The Hub is 3.3 V logic and the Arduino UNO is 5 V, so the two directions are
+handled differently:
+
+- **Hub TX (pin 5) -> Arduino D10 (RX)**: connected directly. The Hub's 3.3 V
+  output is read as HIGH by the ATmega328P at 5 V Vcc on this proven link.
+- **Arduino D11 (TX) -> Hub RX (pin 6)**: the Arduino's 5 V TX must be dropped
+  to 3.3 V before it reaches the Hub. A simple resistor divider does this:
+
+```text
+ Arduino D11 ---- 1 kΩ ----+---- Hub pin 6
+                           |
+                          2 kΩ
+                           |
+                          GND
+```
+
+The divider yields 5 V * 2 / (1 + 2) = 3.33 V at the Hub pin, within its 3.3 V
+logic range. Do not assume the Hub UART pins are 5 V tolerant; omitting the
+divider on the D11 line risks damaging the Hub. The two devices must share a
+signal ground (pin 3). Verify the Powered Up port signal voltage and level
+shifting on your exact hardware before making the physical connection.
 
 ## BTS7960 drive output
 
