@@ -115,8 +115,11 @@ Defaults:
 - UART: Hub port C at 9600 baud
 - Steering motor: Hub port A
 - Steering travel: measured automatically at startup
+- Steering response: quadratic curve (`STEERING_CURVE_EXPONENT = 2`),
+  less sensitive near center, full lock at full stick
 - Xbox A button: arm production drive after calibration
 - Xbox B button: stop and end the program
+- Gyro steering assist: heading-hold + yaw-rate damping on the Hub (enabled)
 
 At startup, the Hub keeps Arduino drive output stopped, moves the steering to
 the left and right mechanical end stops at limited duty, calculates the
@@ -128,6 +131,94 @@ The calibration requires a completed steering mechanism with firm mechanical
 end stops. Do not run it with a loose or unloaded steering motor that can rotate
 continuously. Adjust `CALIBRATION_DUTY_LIMIT` only as high as needed for reliable
 stall detection; the default is 25%.
+
+## Gyro steering assist
+
+The Technic Hub's built-in IMU adds a gyro steering stabilizer to the steering
+motor so the car resists yawing off a straight line, especially just after
+releasing a drift. The assist runs entirely on the Hub: the steering motor and
+the IMU are both Hub-local, so the Arduino throttle/UART path is unchanged and
+steering remains owned by the Hub. It is enabled with `ENABLE_GYRO_ASSIST` in
+both Hub programs.
+
+`hub.imu.heading()` returns a continuous (unwrapped) heading in degrees,
+clockwise positive, resolved about the vertical axis automatically from
+gravity, so the Hub mounting orientation does not matter as long as one face
+stays up. The yaw rate is derived from consecutive heading samples so both
+terms share the same axis and sign; only the heading-to-steering direction
+mapping needs on-car calibration via `YAW_SIGN`.
+
+While the driver steers, the held heading tracks the live heading (no
+correction). When the wheel returns to center **and** throttle is applied, the
+setpoint freezes and the controller counters drift with
+
+```
+correction = YAW_SIGN * (ASSIST_KP * heading_error + ASSIST_KD * yaw_rate)
+target    = driver_target - correction
+```
+
+added to the driver's steering target, then clamped to the calibrated limits.
+The heading error wraps to [-180, 180] so the controller stays correct after
+one or more full turns. The correction is clamped to `ASSIST_MAX` degrees
+either way ("help a little", not an autopilot), and the assist is disabled
+below `ASSIST_THROTTLE_MIN` so the steering never hunts while parked or
+coasting. A small hysteresis (`ASSIST_DEADBAND_ENTER` / `..._EXIT`) prevents
+chattering between the straight and steering modes.
+
+Heading is pure gyro integration (gravity cannot correct yaw), so it drifts
+over long periods. The feature is for short-term straight-line stabilization
+(seconds), not absolute navigation.
+
+Defaults (in `hub/main.py` and `hub/smoke_test.py`):
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `ENABLE_GYRO_ASSIST` | `True` | Master switch |
+| `ASSIST_KP` | `0.4` | deg steering / deg heading error |
+| `ASSIST_KD` | `0.15` | deg steering / (deg/s yaw) |
+| `ASSIST_DEADBAND_ENTER` | `3` | deg; below this, hold the heading |
+| `ASSIST_DEADBAND_EXIT` | `6` | deg; above this, the driver is steering |
+| `ASSIST_MAX` | `15` | max correction in deg |
+| `ASSIST_THROTTLE_MIN` | `5` | `|throttle|` below which assist is off |
+| `YAW_SIGN` | `1` | flip to `-1` if the correction fights the car |
+
+`YAW_SIGN` is the only value that must be set on the car: drive on a straight,
+let the car drift, and confirm the correction opposes the drift; flip it to
+`-1` if it instead makes the drift worse. The smoke-test program runs the same
+assist against the bench backend, so the gains can be tuned on the bench with
+the real steering motor but simulated drive output.
+
+The pure control law is `HeadingHold` in both Hub programs and is mirrored by
+`test/test_assist.py` (run with `./test/run-python-tests.sh`), the same
+mirroring approach used for the throttle response curve in the native C++
+tests.
+
+## Steering response curve
+
+The Xbox left joystick is shaped by a response curve before it is mapped onto
+the measured steering limits, so the lower half of the stick travel maps to a
+smaller fraction of steering travel. This makes the steering less sensitive
+near center for finer control while still reaching full mechanical lock at full
+stick. The curve mirrors the throttle response curve in `Config.h`:
+
+```
+output = sign(input) * |input|^exp / 100^(exp-1)
+```
+
+controlled by `STEERING_CURVE_EXPONENT` in both Hub programs:
+
+| Exponent | Curve | 50% stick | 100% stick |
+| --- | --- | --- | --- |
+| 1 | linear (original feel) | 50% travel | full lock |
+| 2 (default) | quadratic | 25% travel | full lock |
+| 3 | cubic | 12% travel | full lock |
+
+Zero stays zero and +/-100 stays +/-100, so full lock is always available
+regardless of the exponent. The curve is applied in `steering_target` before
+the limit mapping, so it also widens the joystick range that counts as
+"straight" for the gyro assist deadband, which complements the heading hold on
+straights. The pure curve and target mapping are mirrored by
+`test/test_steering.py` (run with `./test/run-python-tests.sh`).
 
 ## UART wiring
 
@@ -320,3 +411,8 @@ while powered down.
 
 Battery monitoring, current and temperature sensing, telemetry, and the future
 binary protocol remain intentionally outside this phase.
+
+The gyro steering assist lives entirely in the Pybricks Hub programs; it
+is Hub-side logic over the steering motor and IMU and is not part of the
+Arduino module set above. Its pure control law is `HeadingHold`, mirrored
+and unit tested in `test/test_assist.py`.
