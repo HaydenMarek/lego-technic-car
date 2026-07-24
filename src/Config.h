@@ -24,6 +24,18 @@
 #define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 0
 #endif
 
+// Throttle curve exponent. Raw -100..100 commands are shaped before reaching
+// the motor driver so the lower half of the trigger travel produces a smaller
+// fraction of motor output, giving finer low-speed control while still
+// reaching full output at full trigger. The curve is
+//   output = sign(in) * |in|^exp / 100^(exp-1)
+// computed with integer math. 1 = linear (no shaping), 2 = quadratic
+// (50% trigger -> 25% output), 3 = cubic (50% -> 12%). Higher values soften
+// the low end more. Override per build with -DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=N.
+#ifndef TECHNIC_RC_THROTTLE_CURVE_EXPONENT
+#define TECHNIC_RC_THROTTLE_CURVE_EXPONENT 1
+#endif
+
 namespace Config {
 
 struct Bts7960Pins {
@@ -72,6 +84,11 @@ constexpr uint32_t MotorReversalDwellMs = 0;   // no dead-time at zero (drift)
 
 constexpr int16_t ThrottleMinimum = -100;
 constexpr int16_t ThrottleMaximum = 100;
+
+// Exponent for the throttle response curve applied in Vehicle before the motor
+// driver sees the target. See TECHNIC_RC_THROTTLE_CURVE_EXPONENT above.
+constexpr uint8_t ThrottleCurveExponent = TECHNIC_RC_THROTTLE_CURVE_EXPONENT;
+
 constexpr size_t ProtocolBufferSize = 48;
 
 // Accept the same protocol through the USB serial monitor for bench testing.

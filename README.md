@@ -167,6 +167,33 @@ pio run -e uno_bts7960
 pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 ```
 
+### Throttle response curve
+
+The raw `-100..100` throttle the Hub sends is shaped by a response curve
+before it reaches the motor driver, so the lower half of the trigger travel
+maps to a smaller fraction of motor output. This gives finer low-speed control
+while still reaching full output at full trigger. The curve is
+
+```
+output = sign(input) * |input|^exp / 100^(exp-1)
+```
+
+controlled by `Config::ThrottleCurveExponent` (build flag
+`-DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=N`):
+
+| Exponent | Curve | 50% trigger | 100% trigger |
+| --- | --- | --- | --- |
+| 1 | linear (no shaping) | 50% | 100% |
+| 2 (default) | quadratic | 25% | 100% |
+| 3 | cubic | 12% | 100% |
+
+The default quadratic curve means you have to pull the trigger much further
+before the car accelerates hard, so small trigger movements stay slow and
+controllable. Raise the exponent to soften the low end further, or set it to
+`1` to restore the original linear feel. The curve is applied in `Vehicle`
+after the UART command is parsed, so it covers both the Hub link and the USB
+serial monitor, and it is independent of the motor ramp below.
+
 The motor output ramps in three phases instead of a single rate:
 
 | Phase | Rate | 0..100 / 100..0 time |

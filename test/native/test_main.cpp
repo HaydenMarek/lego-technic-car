@@ -10,6 +10,21 @@
 
 namespace {
 
+// Mirrors Vehicle::shapeThrottle so the drive tests stay correct for any
+// configured Config::ThrottleCurveExponent.
+int16_t curveShape(int16_t value) {
+  if (value == 0) {
+    return 0;
+  }
+  const int16_t mag = value < 0 ? static_cast<int16_t>(-value) : value;
+  int32_t shaped = mag;
+  for (uint8_t i = 1; i < Config::ThrottleCurveExponent; ++i) {
+    shaped = shaped * mag / 100;
+  }
+  const int16_t result = static_cast<int16_t>(shaped);
+  return value < 0 ? static_cast<int16_t>(-result) : result;
+}
+
 class FakeStream final : public Stream {
  public:
   void receive(const char* value) { input_ += value; }
@@ -110,10 +125,16 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
       !Config::EnableBts7960Outputs || Config::EnableRightBridge;
 
   motorDriver.begin(0);
+
+  // The vehicle applies the throttle response curve before the motor driver
+  // sees the target, so the effective target is the shaped value.
+  const int16_t forward = curveShape(50);
+  const int16_t reverse = curveShape(-50);
+
   vehicle.setThrottle(50);
-  assert(vehicle.throttle() == 50);
-  assert(motorDriver.leftTarget() == 50);
-  assert(motorDriver.rightTarget() == (expectRightOutput ? 50 : 0));
+  assert(vehicle.throttle() == forward);
+  assert(motorDriver.leftTarget() == forward);
+  assert(motorDriver.rightTarget() == (expectRightOutput ? forward : 0));
   assert(motorDriver.leftApplied() == 0);
   assert(motorDriver.rightApplied() == 0);
 
@@ -123,12 +144,12 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
   assert(motorDriver.leftApplied() == 0);
 
   motorDriver.update(20);
-  assert(motorDriver.leftApplied() == 50);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? 50 : 0));
+  assert(motorDriver.leftApplied() == forward);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? forward : 0));
 
   motorDriver.update(200);
-  assert(motorDriver.leftApplied() == 50);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? 50 : 0));
+  assert(motorDriver.leftApplied() == forward);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? forward : 0));
 
   // Reversal: decelerate to zero with the faster decel step (10%/20 ms) in one
   // tick, then, with the reversal dwell removed, snap straight to the opposite
@@ -137,18 +158,18 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
   motorDriver.update(380);
   assert(motorDriver.leftApplied() == 0);
   assert(motorDriver.rightApplied() == 0);
-  assert(motorDriver.leftTarget() == -50);
-  assert(motorDriver.rightTarget() == (expectRightOutput ? -50 : 0));
+  assert(motorDriver.leftTarget() == reverse);
+  assert(motorDriver.rightTarget() == (expectRightOutput ? reverse : 0));
 
   // No reversal dwell: the next tick accelerates backward with the aggressive
   // accel step, reaching the target within a single 20 ms tick.
   motorDriver.update(400);
-  assert(motorDriver.leftApplied() == -50);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? -50 : 0));
+  assert(motorDriver.leftApplied() == reverse);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? reverse : 0));
 
   motorDriver.update(640);
-  assert(motorDriver.leftApplied() == -50);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? -50 : 0));
+  assert(motorDriver.leftApplied() == reverse);
+  assert(motorDriver.rightApplied() == (expectRightOutput ? reverse : 0));
 
   // STOP forces an immediate coast regardless of dynamic braking.
   vehicle.stop();
@@ -173,9 +194,12 @@ void dynamicBrakingEngagesAtNeutralButNotAfterStop() {
   motorDriver.begin(0);
   assert(!motorDriver.brakingActive());  // startup coasts
 
+  // setThrottle shapes through the response curve; the applied value is the
+  // shaped target, not the raw 50.
+  const int16_t drive = curveShape(50);
   vehicle.setThrottle(50);
   motorDriver.update(200);
-  assert(motorDriver.leftApplied() == 50);
+  assert(motorDriver.leftApplied() == drive);
   assert(!motorDriver.brakingActive());  // driving, not braking
 
   // Driver neutral: decelerate to zero, then the bridge shorts to brake.
@@ -188,6 +212,31 @@ void dynamicBrakingEngagesAtNeutralButNotAfterStop() {
   vehicle.stop();
   assert(motorDriver.leftApplied() == 0);
   assert(!motorDriver.brakingActive());
+}
+
+void vehicleAppliesThrottleResponseCurve() {
+  // The default curve (Config::ThrottleCurveExponent == 2) is quadratic:
+  // output = sign(in) * |in|^2 / 100, so half trigger gives a quarter output
+  // and full trigger still reaches the limit. Linear (exp == 1) is a passthrough.
+  FakeStream diagnostics;
+  MotorDriver motorDriver(diagnostics);
+  Vehicle vehicle(motorDriver);
+  motorDriver.begin(0);
+
+  assert(curveShape(0) == 0);
+  assert(curveShape(100) == 100);
+  assert(curveShape(-100) == -100);
+  assert(curveShape(50) == (Config::ThrottleCurveExponent == 1 ? 50 : 25));
+  assert(curveShape(-50) == (Config::ThrottleCurveExponent == 1 ? -50 : -25));
+
+  // setThrottle forwards the shaped value to both motor channels.
+  vehicle.setThrottle(50);
+  assert(vehicle.throttle() == curveShape(50));
+  assert(motorDriver.leftTarget() == curveShape(50));
+
+  vehicle.setThrottle(0);
+  assert(vehicle.throttle() == 0);
+  assert(motorDriver.leftTarget() == 0);
 }
 
 void watchdogTimesOutOnceAndHandlesClockRollover() {
@@ -217,6 +266,7 @@ int main() {
   protocolWritesStableReplies();
   vehicleAppliesThrottleToBothMotorsAndStops();
   dynamicBrakingEngagesAtNeutralButNotAfterStop();
+  vehicleAppliesThrottleResponseCurve();
   watchdogTimesOutOnceAndHandlesClockRollover();
   return 0;
 }
