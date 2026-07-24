@@ -14,3 +14,18 @@ update `README.md` if the user steered the implementation of a new feature
 (added constraints, changed behavior, or made decisions that differ from what
 the README previously documented). Bring `README.md` back in sync with what was
 actually built.
+
+## External documentation
+
+`EXTERNAL_DOCUMENTATION.md` collects useful external links and reference
+material relevant to this project (libraries, datasheets, protocol specs,
+hardware references, tutorials, etc.).
+
+Before starting work on a task, check `EXTERNAL_DOCUMENTATION.md` and fetch the
+information from any links that are relevant to the area you are working on.
+Use that material to inform your implementation and to verify assumptions about
+third-party APIs, hardware, and protocols.
+
+If you discover a useful external resource during your work that would help
+future agents, append it to `EXTERNAL_DOCUMENTATION.md` (with a short
+description of what it covers and why it is useful).
