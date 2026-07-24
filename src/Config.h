@@ -6,10 +6,6 @@
 #define TECHNIC_RC_ENABLE_BTS7960 0
 #endif
 
-#ifndef TECHNIC_RC_ENABLE_RIGHT_BRIDGE
-#define TECHNIC_RC_ENABLE_RIGHT_BRIDGE 0
-#endif
-
 // Per-frame drive acknowledgements are suppressed by default so the
 // half-duplex SoftwareSerial link stays free to receive the next command.
 // Re-enable with -DTECHNIC_RC_ACK_DRIVE_COMMANDS=1 for link debugging.
@@ -52,14 +48,13 @@ constexpr uint32_t FailsafeTimeoutMs = 500;
 constexpr uint8_t HubRxPin = 10;
 constexpr uint8_t HubTxPin = 11;
 
-// BTS7960 / IBT-2 control pins. Each module powers one buggy motor.
-constexpr Bts7960Pins LeftBridgePins{5, 6, 2, 4};
-constexpr Bts7960Pins RightBridgePins{9, 3, 7, 8};
+// The single BTS7960 / IBT-2 module drives both buggy motors. The motors are
+// wired to it with opposite polarity so they spin in opposite directions
+// (they are mounted side-by-side and mirror each other), so one bridge is
+// enough for both drive motors.
+constexpr Bts7960Pins BridgePins{5, 6, 2, 4};
 
 constexpr bool EnableBts7960Outputs = TECHNIC_RC_ENABLE_BTS7960 != 0;
-constexpr bool EnableLeftBridge = EnableBts7960Outputs;
-constexpr bool EnableRightBridge =
-    EnableBts7960Outputs && TECHNIC_RC_ENABLE_RIGHT_BRIDGE != 0;
 
 // When true the Arduino replies ACK,D,<throttle> to every drive command.
 // Disabled by default: the reply blocks SoftwareSerial TX (and therefore RX)
@@ -67,8 +62,11 @@ constexpr bool EnableRightBridge =
 constexpr bool AcknowledgeDriveCommands = TECHNIC_RC_ACK_DRIVE_COMMANDS != 0;
 constexpr bool EnableDynamicBraking = TECHNIC_RC_ENABLE_DYNAMIC_BRAKING != 0;
 
-constexpr bool InvertLeftMotor = false;
-constexpr bool InvertRightMotor = false;
+// Inverts the commanded direction of the single bridge, flipping both motors
+// together (they stay opposite because the polarity difference is in the
+// wiring). Use this if the whole car drives backward when the throttle
+// commands forward; do not swap motor wires while powered.
+constexpr bool InvertMotor = false;
 
 // Motor ramp. Acceleration is maximally aggressive so the car snaps to the
 // commanded throttle within a single 20 ms tick (for initiating drifts), and

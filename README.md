@@ -1,7 +1,9 @@
 # LEGO Technic RC Vehicle Controller
 
 Firmware for an Arduino UNO acting as the vehicle controller between a LEGO
-Technic Hub and two BTS7960 motor drivers.
+Technic Hub and a single BTS7960 motor driver. One bridge drives both buggy
+motors: they are mounted side-by-side and must spin in opposite directions, so
+the two motors are wired to the same bridge with opposite polarity.
 
 The Technic Hub owns the Xbox controller and Powered Up steering motor. The
 UART protocol carries throttle intent to the Arduino and deliberately contains
@@ -14,13 +16,14 @@ Commands are ASCII lines terminated by `\n`:
 | Input | Response | Effect |
 | --- | --- | --- |
 | `PING` | `PONG` | Link test; does not refresh drive intent |
-| `MODE` | `MODE,BENCH`, `MODE,BTS7960_SINGLE`, or `MODE,BTS7960_DUAL` | Report active output backend |
-| `STOP` | `ACK,STOP` | Stop both motor targets and refresh the watchdog |
+| `MODE` | `MODE,BENCH` or `MODE,BTS7960` | Report active output backend |
+| `STOP` | `ACK,STOP` | Stop the motor target and refresh the watchdog |
 | `D,<throttle>` | none by default (optional `ACK,D,<throttle>`) | Apply throttle and refresh the watchdog |
 | Invalid input | `ERR` | No state change and no watchdog refresh |
 
-Throttle must be an integer from -100 to 100. The same target is applied to
-both drive motors. Steering is controlled exclusively by the Technic Hub.
+Throttle must be an integer from -100 to 100. The same target drives the single
+bridge, and therefore both motors (in opposite directions through the wiring).
+Steering is controlled exclusively by the Technic Hub.
 
 If no fresh drive or stop command arrives for more than 500 ms, the watchdog
 stops the vehicle. `PING` cannot keep stale throttle alive. `millis()` rollover
@@ -64,8 +67,8 @@ D,-25
 STOP
 ```
 
-For `D,50`, the temporary motor driver prints `MOTOR,50,50`. After 500 ms
-without another valid command, it prints `MOTOR,0,0` and the failsafe message.
+For `D,50`, the temporary motor driver prints `MOTOR,50`. After 500 ms without
+another valid command, it prints `MOTOR,0` and the failsafe message.
 
 Pure control behavior also has host-side checks that need only a C++17 compiler:
 
@@ -89,35 +92,19 @@ refuses to continue unless Arduino reports the expected backend.
 pio run -e uno_bench --target upload --upload-port /dev/ttyUSB0
 ```
 
-### One-bridge commissioning
-
-- Hub: [`hub/single_bridge.py`](hub/single_bridge.py)
-- Arduino: `uno_bts7960_single`
-- Active drive output: left BTS7960 only
-
-```sh
-pio run -e uno_bts7960_single --target upload --upload-port /dev/ttyUSB0
-```
-
-Connect only the left bridge control pins and one unloaded motor for this test.
-The right bridge target and hardware output remain forced to zero. The Hub
-program requires `MODE,BTS7960_SINGLE`, successful steering calibration,
-neutral triggers, and a new A-button press before it sends throttle.
-
-### Two-bridge operation
+### Production drive
 
 - Hub: [`hub/main.py`](hub/main.py)
 - Arduino: `uno_bts7960`
-- Drive result: PWM output to both BTS7960 modules
+- Drive result: PWM output to the single BTS7960 module
 
 ```sh
 pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 ```
 
-The two-bridge Hub program verifies `MODE,BTS7960_DUAL`, calibrates steering, then
-keeps sending `STOP` until both triggers are neutral and the Xbox A button is
-newly pressed. Xbox B stops and ends the program. The smoke-test Hub program
-similarly requires `MODE,BENCH` and never arms a hardware-enabled Arduino.
+The Hub program requires `MODE,BTS7960`, successful steering calibration,
+neutral triggers, and a new A-button press before it sends throttle. Xbox B
+stops and ends the program.
 
 Both Hub programs map Xbox triggers to throttle, control the Powered Up
 steering motor directly from the left joystick, and send only `D,<throttle>`
@@ -158,11 +145,9 @@ connection; do not assume the Hub UART pins are 5 V tolerant.
 ## BTS7960 drive output
 
 The default `uno_bench` environment only prints simulated motor output. Use
-`uno_bts7960_single` to enable only the left bridge, or `uno_bts7960` to enable
-both bridges:
+`uno_bts7960` to drive the single bridge:
 
 ```sh
-pio run -e uno_bts7960_single
 pio run -e uno_bts7960
 pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 ```
@@ -223,7 +208,9 @@ mirrors the coast/brake/hold distinction Pybricks exposes on motors.
 
 ### UNO to BTS7960 control wiring
 
-For the initial `uno_bts7960_single` test, connect only the left module:
+The single module drives both buggy motors. The two motors are wired to the
+same `M+`/`M-` output with opposite polarity so they spin in opposite
+directions:
 
 ```text
                          ONE BTS7960 / IBT-2 MODULE
@@ -239,8 +226,10 @@ For the initial `uno_bts7960_single` test, connect only the left module:
 
  2S battery positive --- fuse --- switch ------> B+
 
- Buggy motor wire 1 ----------------------------> M+
- Buggy motor wire 2 ----------------------------> M-
+ Buggy motor 1 wire 1 -------------------------> M+
+ Buggy motor 1 wire 2 -------------------------> M-
+ Buggy motor 2 wire 1 -------------------------> M-   (opposite polarity)
+ Buggy motor 2 wire 2 -------------------------> M+   (opposite polarity)
 
  R_IS and L_IS: leave disconnected for now.
 ```
@@ -251,27 +240,23 @@ The module normally has two high-current screw-terminal pairs:
 | --- | --- |
 | `B+` | 2S battery positive through the fuse and main switch |
 | `B-` | 2S battery negative/common ground |
-| `M+` | First buggy-motor wire |
-| `M-` | Second buggy-motor wire |
+| `M+` | First buggy-motor wire 1 and second buggy-motor wire 2 |
+| `M-` | First buggy-motor wire 2 and second buggy-motor wire 1 |
 
 Terminal order varies between clone boards, so follow the labels printed on
 your exact PCB rather than assuming left-to-right order. `B+` and `B-` are the
 battery input; `M+` and `M-` are the motor output. Reversing the two motor wires
-only reverses motor direction, but reversing battery polarity can destroy the
-module.
+of a single motor only reverses that motor's direction, but reversing battery
+polarity can destroy the module.
 
-| Module | BTS7960 pin | Arduino UNO pin |
-| --- | --- | --- |
-| Left | `RPWM` | D5 (PWM) |
-| Left | `LPWM` | D6 (PWM) |
-| Left | `R_EN` | D2 |
-| Left | `L_EN` | D4 |
-| Right | `RPWM` | D9 (PWM) |
-| Right | `LPWM` | D3 (PWM) |
-| Right | `R_EN` | D7 |
-| Right | `L_EN` | D8 |
-| Both | `VCC` | Arduino 5 V logic supply |
-| Both | `GND` | Arduino GND/common signal ground |
+| BTS7960 pin | Arduino UNO pin |
+| --- | --- |
+| `RPWM` | D5 (PWM) |
+| `LPWM` | D6 (PWM) |
+| `R_EN` | D2 |
+| `L_EN` | D4 |
+| `VCC` | Arduino 5 V logic supply |
+| `GND` | Arduino GND/common signal ground |
 
 Feed the module power terminals directly from the fused 2S motor-power
 distribution using appropriately rated wire and connectors. Do not connect
@@ -280,7 +265,7 @@ For the first test, power the UNO from USB; only the grounds are joined.
 
 During reset, Arduino pins are inputs. Add a 10 kΩ pull-down from each `R_EN`
 and `L_EN` line to ground unless the exact module is verified to provide them,
-so the bridges remain disabled while the controller boots.
+so the bridge remains disabled while the controller boots.
 
 ### Power safety
 
@@ -289,7 +274,7 @@ so the bridges remain disabled while the controller boots.
   bench supply instead of the battery.
 - Install a main fuse close to the battery. Select it from measured motor stall
   current and the ratings of the wiring, connectors, and modules—not from the
-  module's advertised “43 A” name.
+  module's advertised "43 A" name.
 - A 2600 mAh 15C pack is nominally rated around 39 A, but its actual safe limit
   depends on the specific pack and its protection circuitry.
 - Battery voltage monitoring is not implemented. Use a protected pack/BMS or
@@ -298,15 +283,19 @@ so the bridges remain disabled while the controller boots.
 - Power the Arduino and Hub/controller logic before connecting motor power.
   Disconnect motor power first when shutting the system down.
 
-If a motor turns backward, change its corresponding `InvertLeftMotor` or
-`InvertRightMotor` constant in `src/Config.h`; do not swap wires while powered.
+If the whole car drives backward when the throttle commands forward, change
+`InvertMotor` in `src/Config.h`; do not swap wires while powered. The two motors
+must stay wired with opposite polarity so they keep spinning in opposite
+directions — to reverse only one motor's direction, swap that motor's two wires
+while powered down.
 
 ## Module boundaries
 
 - `Protocol`: line framing, validation, commands, and replies
 - `Vehicle`: current throttle intent and high-level stop behavior
 - `MotorDriver`: split ramping (acceleration/deceleration/reversal dwell),
-  optional dynamic braking, immediate shutdown, PWM, and BTS7960 output boundary
+  optional dynamic braking, immediate shutdown, PWM, and the single BTS7960
+  output boundary
 - `Watchdog`: independent command timeout detection
 
 Battery monitoring, current and temperature sensing, telemetry, and the future

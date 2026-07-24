@@ -6,7 +6,7 @@ Vehicle::Vehicle(MotorDriver& motorDriver) : motorDriver_(motorDriver) {}
 
 void Vehicle::setThrottle(int16_t throttle) {
   throttle_ = shapeThrottle(throttle);
-  motorDriver_.setTargets(throttle_, throttle_);
+  motorDriver_.setTarget(throttle_);
 }
 
 void Vehicle::stop() {

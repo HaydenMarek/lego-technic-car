@@ -106,10 +106,8 @@ void protocolWritesStableReplies() {
   protocol.sendError();
 
   std::string expected = "READY\nPONG\n";
-  if constexpr (Config::EnableRightBridge) {
-    expected += "MODE,BTS7960_DUAL\n";
-  } else if constexpr (Config::EnableBts7960Outputs) {
-    expected += "MODE,BTS7960_SINGLE\n";
+  if constexpr (Config::EnableBts7960Outputs) {
+    expected += "MODE,BTS7960\n";
   } else {
     expected += "MODE,BENCH\n";
   }
@@ -117,13 +115,10 @@ void protocolWritesStableReplies() {
   assert(stream.output() == expected);
 }
 
-void vehicleAppliesThrottleToBothMotorsAndStops() {
+void vehicleAppliesThrottleAndStops() {
   FakeStream diagnostics;
   MotorDriver motorDriver(diagnostics);
   Vehicle vehicle(motorDriver);
-  constexpr bool expectRightOutput =
-      !Config::EnableBts7960Outputs || Config::EnableRightBridge;
-
   motorDriver.begin(0);
 
   // The vehicle applies the throttle response curve before the motor driver
@@ -133,57 +128,47 @@ void vehicleAppliesThrottleToBothMotorsAndStops() {
 
   vehicle.setThrottle(50);
   assert(vehicle.throttle() == forward);
-  assert(motorDriver.leftTarget() == forward);
-  assert(motorDriver.rightTarget() == (expectRightOutput ? forward : 0));
-  assert(motorDriver.leftApplied() == 0);
-  assert(motorDriver.rightApplied() == 0);
+  assert(motorDriver.target() == forward);
+  assert(motorDriver.applied() == 0);
 
   // Acceleration is maximally aggressive: 100% per 20 ms, so a single tick
   // snaps to the commanded throttle.
   motorDriver.update(19);
-  assert(motorDriver.leftApplied() == 0);
+  assert(motorDriver.applied() == 0);
 
   motorDriver.update(20);
-  assert(motorDriver.leftApplied() == forward);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? forward : 0));
+  assert(motorDriver.applied() == forward);
 
   motorDriver.update(200);
-  assert(motorDriver.leftApplied() == forward);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? forward : 0));
+  assert(motorDriver.applied() == forward);
 
   // Reversal: decelerate to zero with the faster decel step (10%/20 ms) in one
   // tick, then, with the reversal dwell removed, snap straight to the opposite
   // target on the next tick.
   vehicle.setThrottle(-50);
   motorDriver.update(380);
-  assert(motorDriver.leftApplied() == 0);
-  assert(motorDriver.rightApplied() == 0);
-  assert(motorDriver.leftTarget() == reverse);
-  assert(motorDriver.rightTarget() == (expectRightOutput ? reverse : 0));
+  assert(motorDriver.applied() == 0);
+  assert(motorDriver.target() == reverse);
 
   // No reversal dwell: the next tick accelerates backward with the aggressive
   // accel step, reaching the target within a single 20 ms tick.
   motorDriver.update(400);
-  assert(motorDriver.leftApplied() == reverse);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? reverse : 0));
+  assert(motorDriver.applied() == reverse);
 
   motorDriver.update(640);
-  assert(motorDriver.leftApplied() == reverse);
-  assert(motorDriver.rightApplied() == (expectRightOutput ? reverse : 0));
+  assert(motorDriver.applied() == reverse);
 
   // STOP forces an immediate coast regardless of dynamic braking.
   vehicle.stop();
   assert(vehicle.throttle() == 0);
-  assert(motorDriver.leftTarget() == 0);
-  assert(motorDriver.rightTarget() == 0);
-  assert(motorDriver.leftApplied() == 0);
-  assert(motorDriver.rightApplied() == 0);
+  assert(motorDriver.target() == 0);
+  assert(motorDriver.applied() == 0);
 }
 
 void dynamicBrakingEngagesAtNeutralButNotAfterStop() {
   // Only meaningful when dynamic braking and at least one bridge are enabled.
   if constexpr (!Config::EnableDynamicBraking ||
-                !Config::EnableLeftBridge) {
+                !Config::EnableBts7960Outputs) {
     return;
   }
 
@@ -199,18 +184,18 @@ void dynamicBrakingEngagesAtNeutralButNotAfterStop() {
   const int16_t drive = curveShape(50);
   vehicle.setThrottle(50);
   motorDriver.update(200);
-  assert(motorDriver.leftApplied() == drive);
+  assert(motorDriver.applied() == drive);
   assert(!motorDriver.brakingActive());  // driving, not braking
 
   // Driver neutral: decelerate to zero, then the bridge shorts to brake.
   vehicle.setThrottle(0);
   motorDriver.update(400);
-  assert(motorDriver.leftApplied() == 0);
+  assert(motorDriver.applied() == 0);
   assert(motorDriver.brakingActive());
 
   // STOP releases the brake into a coast for safety.
   vehicle.stop();
-  assert(motorDriver.leftApplied() == 0);
+  assert(motorDriver.applied() == 0);
   assert(!motorDriver.brakingActive());
 }
 
@@ -232,11 +217,11 @@ void vehicleAppliesThrottleResponseCurve() {
   // setThrottle forwards the shaped value to both motor channels.
   vehicle.setThrottle(50);
   assert(vehicle.throttle() == curveShape(50));
-  assert(motorDriver.leftTarget() == curveShape(50));
+  assert(motorDriver.target() == curveShape(50));
 
   vehicle.setThrottle(0);
   assert(vehicle.throttle() == 0);
-  assert(motorDriver.leftTarget() == 0);
+  assert(motorDriver.target() == 0);
 }
 
 void watchdogTimesOutOnceAndHandlesClockRollover() {
@@ -264,7 +249,7 @@ int main() {
   protocolAcceptsIntentCommandsAndRejectsMalformedInput();
   protocolRecoversAfterOverflow();
   protocolWritesStableReplies();
-  vehicleAppliesThrottleToBothMotorsAndStops();
+  vehicleAppliesThrottleAndStops();
   dynamicBrakingEngagesAtNeutralButNotAfterStop();
   vehicleAppliesThrottleResponseCurve();
   watchdogTimesOutOnceAndHandlesClockRollover();

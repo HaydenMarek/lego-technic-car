@@ -1,100 +1,16 @@
 #include "MotorDriver.h"
 
-MotorDriver::MotorDriver(Print& diagnostics) : diagnostics_(diagnostics) {}
+namespace {
 
-void MotorDriver::begin(uint32_t now) {
-  lastRampMs_ = now;
-  forceCoast_ = true;
-
-  if constexpr (Config::EnableBts7960Outputs) {
-    configureBridge(Config::LeftBridgePins);
-    // Keep the unused module disabled in single-bridge builds too.
-    configureBridge(Config::RightBridgePins);
-  }
-
-  writeOutputs();
+int8_t sign(int16_t value) {
+  return (value > 0) - (value < 0);
 }
 
-void MotorDriver::setTargets(int16_t left, int16_t right) {
-  leftTarget_ = clamp(left);
-  if constexpr (Config::EnableBts7960Outputs &&
-                !Config::EnableRightBridge) {
-    rightTarget_ = 0;
-  } else {
-    rightTarget_ = clamp(right);
-  }
-  // A fresh drive command resumes normal output policy, so driver-neutral
-  // braking becomes allowed again at the next zero crossing.
-  forceCoast_ = false;
+int16_t magnitude(int16_t value) {
+  return value < 0 ? static_cast<int16_t>(-value) : value;
 }
 
-void MotorDriver::update(uint32_t now) {
-  const uint32_t elapsed = now - lastRampMs_;
-  if (elapsed < Config::MotorRampIntervalMs) {
-    return;
-  }
-
-  const uint32_t intervals = elapsed / Config::MotorRampIntervalMs;
-  lastRampMs_ = now;
-
-  const int16_t nextLeft = rampChannel(leftApplied_, leftTarget_, now,
-                                       intervals, leftReversalUntilMs_,
-                                       leftReversalSign_);
-  const int16_t nextRight = rampChannel(rightApplied_, rightTarget_, now,
-                                        intervals, rightReversalUntilMs_,
-                                        rightReversalSign_);
-  if (nextLeft == leftApplied_ && nextRight == rightApplied_) {
-    return;
-  }
-
-  leftApplied_ = nextLeft;
-  rightApplied_ = nextRight;
-  writeOutputs();
-}
-
-void MotorDriver::stop() {
-  leftTarget_ = 0;
-  rightTarget_ = 0;
-  // STOP, failsafe, and startup always coast for safety: never apply dynamic
-  // braking on these paths regardless of the EnableDynamicBraking setting.
-  forceCoast_ = true;
-
-  // If already at rest and coasting (or no output has ever been written) there
-  // is nothing to do. Still re-write when a bridge is currently braking so the
-  // short is released into a coast.
-  if (leftApplied_ == 0 && rightApplied_ == 0 && hasAppliedOutput_ &&
-      !brakingActive_) {
-    return;
-  }
-
-  leftApplied_ = 0;
-  rightApplied_ = 0;
-  writeOutputs();
-}
-
-int16_t MotorDriver::leftTarget() const { return leftTarget_; }
-
-int16_t MotorDriver::rightTarget() const { return rightTarget_; }
-
-int16_t MotorDriver::leftApplied() const { return leftApplied_; }
-
-int16_t MotorDriver::rightApplied() const { return rightApplied_; }
-
-bool MotorDriver::brakingActive() const { return brakingActive_; }
-
-int16_t MotorDriver::clamp(int16_t value) {
-  if (value < Config::ThrottleMinimum) {
-    return Config::ThrottleMinimum;
-  }
-  if (value > Config::ThrottleMaximum) {
-    return Config::ThrottleMaximum;
-  }
-  return value;
-}
-
-int16_t MotorDriver::approach(int16_t current,
-                              int16_t target,
-                              int32_t amount) {
+int16_t approach(int16_t current, int16_t target, int32_t amount) {
   if (current < target) {
     const int32_t next = static_cast<int32_t>(current) + amount;
     return static_cast<int16_t>(next > target ? target : next);
@@ -106,20 +22,17 @@ int16_t MotorDriver::approach(int16_t current,
   return current;
 }
 
-int8_t MotorDriver::sign(int16_t value) {
-  return (value > 0) - (value < 0);
-}
-
-int16_t MotorDriver::magnitude(int16_t value) {
-  return value < 0 ? static_cast<int16_t>(-value) : value;
-}
-
-int16_t MotorDriver::rampChannel(int16_t applied,
-                                 int16_t target,
-                                 uint32_t now,
-                                 uint32_t intervals,
-                                 uint32_t& reversalUntilMs,
-                                 int8_t& reversalSign) {
+// Advance the single motor channel toward its target using the split ramp:
+// decelerate to zero on a direction reversal, hold there for the reversal
+// dwell, then accelerate the opposite way; otherwise accelerate away from zero
+// or decelerate toward it. Reversal dwell state is carried in reversalUntilMs
+// /reversalSign and updated by reference.
+int16_t rampChannel(int16_t applied,
+                    int16_t target,
+                    uint32_t now,
+                    uint32_t intervals,
+                    uint32_t& reversalUntilMs,
+                    int8_t& reversalSign) {
   const int8_t appliedSign = sign(applied);
   const int8_t targetSign = sign(target);
 
@@ -127,7 +40,8 @@ int16_t MotorDriver::rampChannel(int16_t applied,
   // arm a short dead-time (dwell) at zero before ramping the opposite way so
   // the drivetrain is not snapped backward.
   if (applied != 0 && target != 0 && appliedSign != targetSign) {
-    const int32_t amount = intervals * Config::MotorDecelStep;
+    const int32_t amount = static_cast<int32_t>(intervals) *
+                           Config::MotorDecelStep;
     const int16_t next = approach(applied, 0, amount);
     if (next == 0) {
       reversalUntilMs = now + Config::MotorReversalDwellMs;
@@ -154,8 +68,83 @@ int16_t MotorDriver::rampChannel(int16_t applied,
   const int16_t step = magnitude(target) > magnitude(applied)
                            ? Config::MotorAccelStep
                            : Config::MotorDecelStep;
-  const int32_t amount = intervals * step;
+  const int32_t amount = static_cast<int32_t>(intervals) * step;
   return approach(applied, target, amount);
+}
+
+}  // namespace
+
+MotorDriver::MotorDriver(Print& diagnostics) : diagnostics_(diagnostics) {}
+
+void MotorDriver::begin(uint32_t now) {
+  lastRampMs_ = now;
+  forceCoast_ = true;
+
+  if constexpr (Config::EnableBts7960Outputs) {
+    configureBridge(Config::BridgePins);
+  }
+
+  writeOutputs();
+}
+
+void MotorDriver::setTarget(int16_t target) {
+  target_ = clamp(target);
+  // A fresh drive command resumes normal output policy, so driver-neutral
+  // braking becomes allowed again at the next zero crossing.
+  forceCoast_ = false;
+}
+
+void MotorDriver::update(uint32_t now) {
+  const uint32_t elapsed = now - lastRampMs_;
+  if (elapsed < Config::MotorRampIntervalMs) {
+    return;
+  }
+
+  const uint32_t intervals = elapsed / Config::MotorRampIntervalMs;
+  lastRampMs_ = now;
+
+  const int16_t next = rampChannel(applied_, target_, now,
+                                   intervals, reversalUntilMs_,
+                                   reversalSign_);
+  if (next == applied_) {
+    return;
+  }
+
+  applied_ = next;
+  writeOutputs();
+}
+
+void MotorDriver::stop() {
+  target_ = 0;
+  // STOP, failsafe, and startup always coast for safety: never apply dynamic
+  // braking on these paths regardless of the EnableDynamicBraking setting.
+  forceCoast_ = true;
+
+  // If already at rest and coasting (or no output has ever been written) there
+  // is nothing to do. Still re-write when the bridge is currently braking so the
+  // short is released into a coast.
+  if (applied_ == 0 && hasAppliedOutput_ && !brakingActive_) {
+    return;
+  }
+
+  applied_ = 0;
+  writeOutputs();
+}
+
+int16_t MotorDriver::target() const { return target_; }
+
+int16_t MotorDriver::applied() const { return applied_; }
+
+bool MotorDriver::brakingActive() const { return brakingActive_; }
+
+int16_t MotorDriver::clamp(int16_t value) {
+  if (value < Config::ThrottleMinimum) {
+    return Config::ThrottleMinimum;
+  }
+  if (value > Config::ThrottleMaximum) {
+    return Config::ThrottleMaximum;
+  }
+  return value;
 }
 
 uint8_t MotorDriver::toPwm(int16_t magnitude) {
@@ -226,26 +215,15 @@ bool MotorDriver::brakingEnabled() const {
 void MotorDriver::writeOutputs() {
   bool anyBrake = false;
 
-  if constexpr (Config::EnableLeftBridge) {
-    const bool brake =
-        brakingEnabled() && leftApplied_ == 0 && leftTarget_ == 0;
+  if constexpr (Config::EnableBts7960Outputs) {
+    const bool brake = brakingEnabled() && applied_ == 0 && target_ == 0;
     anyBrake = anyBrake || brake;
-    writeBridge(Config::LeftBridgePins, leftApplied_,
-                Config::InvertLeftMotor, brake);
-  }
-  if constexpr (Config::EnableRightBridge) {
-    const bool brake =
-        brakingEnabled() && rightApplied_ == 0 && rightTarget_ == 0;
-    anyBrake = anyBrake || brake;
-    writeBridge(Config::RightBridgePins, rightApplied_,
-                Config::InvertRightMotor, brake);
+    writeBridge(Config::BridgePins, applied_, Config::InvertMotor, brake);
   }
 
   brakingActive_ = anyBrake;
   hasAppliedOutput_ = true;
 
   diagnostics_.print(F("MOTOR,"));
-  diagnostics_.print(leftApplied_);
-  diagnostics_.print(',');
-  diagnostics_.println(rightApplied_);
+  diagnostics_.println(applied_);
 }

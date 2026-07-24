@@ -49,7 +49,7 @@ async def require_motor_firmware():
 
     uart.clear()
     await uart.write("MODE\n")
-    await uart.wait_until(b"MODE,BTS7960_DUAL")
+    await uart.wait_until(b"MODE,BTS7960")
     uart.clear()
 
 

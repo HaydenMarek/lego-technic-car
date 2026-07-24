@@ -29,8 +29,7 @@ compile_and_run() {
 }
 
 compile_and_run bench
-compile_and_run single -DTECHNIC_RC_ENABLE_BTS7960=1
-compile_and_run dual -DTECHNIC_RC_ENABLE_BTS7960=1 -DTECHNIC_RC_ENABLE_RIGHT_BRIDGE=1
-compile_and_run brake -DTECHNIC_RC_ENABLE_BTS7960=1 -DTECHNIC_RC_ENABLE_RIGHT_BRIDGE=1 -DTECHNIC_RC_ENABLE_DYNAMIC_BRAKING=1
+compile_and_run bts7960 -DTECHNIC_RC_ENABLE_BTS7960=1
+compile_and_run brake -DTECHNIC_RC_ENABLE_BTS7960=1 -DTECHNIC_RC_ENABLE_DYNAMIC_BRAKING=1
 
-echo "Native bench, single-bridge, dual-bridge, and dynamic-braking tests passed"
+echo "Native bench, BTS7960, and dynamic-braking tests passed"
