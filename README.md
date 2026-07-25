@@ -294,19 +294,22 @@ The motor output ramps in three phases instead of a single rate:
 
 | Phase | Rate | 0..100 / 100..0 time |
 | --- | --- | --- |
-| Acceleration | `MotorAccelStep` = 100%/20 ms | one 20 ms tick |
+| Acceleration | `MotorAccelStep` = 5%/20 ms | 400 ms |
 | Deceleration | `MotorDecelStep` = 10%/20 ms | 200 ms |
-| Reversal dwell | `MotorReversalDwellMs` = 0 ms at zero | none |
+| Reversal dwell | `MotorReversalDwellMs` = 60 ms at zero | 60 ms |
 
-Acceleration is maximally aggressive so the car snaps to the commanded
-throttle within a single 20 ms tick (useful for initiating drifts), and the
-reversal dwell is removed so the throttle can be flicked back and forth with
-no dead-time at zero. Deceleration stays prompt so throttle is released and
-brakes applied quickly. A direction reversal still decelerates to zero with
-the fast decel step before ramping the opposite way, which avoids snapping the
-drivetrain backward. The (zero-length) dwell is abandoned early if the driver
-returns the throttle to neutral or reverses their choice, so the car stays
-responsive.
+Acceleration is gentle (slower than deceleration) so the car spools up softly
+instead of slamming full battery voltage into a stalled motor in one tick.
+This matters because the firmware has no current limiting: an instantaneous
+0->100% step from rest drives a full stall-current spike through the winding,
+which can overheat and fry a brushed motor. The 5%/20 ms ramp reaches full
+output in 400 ms, fast enough to drive but soft enough to spare the motor on
+launch. Deceleration stays prompt so throttle is released and brakes applied
+quickly. A direction reversal decelerates to zero with the fast decel step,
+then holds at zero for a short dead-time (dwell) before ramping the opposite
+way, which avoids snapping the drivetrain backward. The dwell is abandoned
+early if the driver returns the throttle to neutral or reverses their choice,
+so the car stays responsive.
 
 Optional dynamic braking is available for driver neutral. When enabled
 (`-DTECHNIC_RC_ENABLE_DYNAMIC_BRAKING=1`), the bridge shorts the motor at

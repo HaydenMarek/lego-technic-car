@@ -131,31 +131,36 @@ void vehicleAppliesThrottleAndStops() {
   assert(motorDriver.target() == forward);
   assert(motorDriver.applied() == 0);
 
-  // Acceleration is maximally aggressive: 100% per 20 ms, so a single tick
-  // snaps to the commanded throttle.
+  // Acceleration is gentle: 5% per 20 ms, so 0..50 takes 200 ms (10 ticks).
   motorDriver.update(19);
-  assert(motorDriver.applied() == 0);
+  assert(motorDriver.applied() == 0);  // no tick yet
 
   motorDriver.update(20);
-  assert(motorDriver.applied() == forward);
+  assert(motorDriver.applied() == 5);  // first accel tick
 
   motorDriver.update(200);
-  assert(motorDriver.applied() == forward);
+  assert(motorDriver.applied() == forward);  // reached target after 200 ms
 
-  // Reversal: decelerate to zero with the faster decel step (10%/20 ms) in one
-  // tick, then, with the reversal dwell removed, snap straight to the opposite
-  // target on the next tick.
+  motorDriver.update(400);
+  assert(motorDriver.applied() == forward);  // steady
+
+  // Reversal: decelerate to zero with the faster decel step (10%/20 ms) over
+  // 100 ms, then hold at zero for the 60 ms reversal dwell before ramping the
+  // opposite way.
   vehicle.setThrottle(-50);
-  motorDriver.update(380);
+  motorDriver.update(500);  // 100 ms after 400: 5 ticks * 10% = 50 -> 0
   assert(motorDriver.applied() == 0);
   assert(motorDriver.target() == reverse);
 
-  // No reversal dwell: the next tick accelerates backward with the aggressive
-  // accel step, reaching the target within a single 20 ms tick.
-  motorDriver.update(400);
-  assert(motorDriver.applied() == reverse);
+  // Reversal dwell: still held at zero at 540 ms (within the 60 ms window).
+  motorDriver.update(540);
+  assert(motorDriver.applied() == 0);
 
-  motorDriver.update(640);
+  // Dwell expired; the next ticks accelerate backward at 5%/20 ms.
+  motorDriver.update(560);
+  assert(motorDriver.applied() == -5);
+
+  motorDriver.update(760);  // 200 ms of accel after the dwell reaches -50
   assert(motorDriver.applied() == reverse);
 
   // STOP forces an immediate coast regardless of dynamic braking.

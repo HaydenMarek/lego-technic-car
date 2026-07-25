@@ -29,7 +29,7 @@
 // (50% trigger -> 25% output), 3 = cubic (50% -> 12%). Higher values soften
 // the low end more. Override per build with -DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=N.
 #ifndef TECHNIC_RC_THROTTLE_CURVE_EXPONENT
-#define TECHNIC_RC_THROTTLE_CURVE_EXPONENT 1
+#define TECHNIC_RC_THROTTLE_CURVE_EXPONENT 2
 #endif
 
 namespace Config {
@@ -68,17 +68,16 @@ constexpr bool EnableDynamicBraking = TECHNIC_RC_ENABLE_DYNAMIC_BRAKING != 0;
 // commands forward; do not swap motor wires while powered.
 constexpr bool InvertMotor = false;
 
-// Motor ramp. Acceleration is maximally aggressive so the car snaps to the
-// commanded throttle within a single 20 ms tick (for initiating drifts), and
-// the reversal dwell is removed so throttle can be flicked back and forth with
-// no dead-time at zero. Deceleration stays prompt so throttle is released and
-// brakes applied quickly. A direction reversal still decelerates to zero with
-// the fast decel step before ramping the opposite way, which avoids snapping the
-// drivetrain backward.
+// Motor ramp. Acceleration is gentler than deceleration so the car spools up
+// softly instead of slamming full battery voltage into a stalled motor (which
+// risks cooking the winding with no current limiting), while throttle release
+// and braking stay prompt. A direction reversal decelerates to zero with the
+// fast decel step, then holds there for a short dead-time (dwell) before ramping
+// the opposite way, which avoids snapping the drivetrain backward.
 constexpr uint32_t MotorRampIntervalMs = 20;
-constexpr int16_t MotorAccelStep = 100;   // 100%/20 ms -> 0..100 in one tick
-constexpr int16_t MotorDecelStep = 10;    // 10%/20 ms -> 200 ms 100..0
-constexpr uint32_t MotorReversalDwellMs = 0;   // no dead-time at zero (drift)
+constexpr int16_t MotorAccelStep = 5;     // 5%/20 ms   -> 400 ms 0..100
+constexpr int16_t MotorDecelStep = 10;    // 10%/20 ms  -> 200 ms 100..0
+constexpr uint32_t MotorReversalDwellMs = 60;  // dead-time at zero on reversal
 
 constexpr int16_t ThrottleMinimum = -100;
 constexpr int16_t ThrottleMaximum = 100;
