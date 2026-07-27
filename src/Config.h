@@ -75,7 +75,7 @@ constexpr bool InvertMotor = false;
 // fast decel step, then holds there for a short dead-time (dwell) before ramping
 // the opposite way, which avoids snapping the drivetrain backward.
 constexpr uint32_t MotorRampIntervalMs = 20;
-constexpr int16_t MotorAccelStep = 5;     // 5%/20 ms   -> 400 ms 0..100
+constexpr int16_t MotorAccelStep = 20;     // 20%/20 ms   -> 100 ms 0..100
 constexpr int16_t MotorDecelStep = 10;    // 10%/20 ms  -> 200 ms 100..0
 constexpr uint32_t MotorReversalDwellMs = 60;  // dead-time at zero on reversal
 
