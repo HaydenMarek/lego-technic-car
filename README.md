@@ -296,7 +296,7 @@ The motor output ramps in three phases instead of a single rate:
 
 | Phase | Rate | 0..100 / 100..0 time |
 | --- | --- | --- |
-| Acceleration | `MotorAccelStep` = 5%/20 ms | 400 ms |
+| Acceleration | `MotorAccelStep` = 20%/20 ms | 100 ms |
 | Deceleration | `MotorDecelStep` = 10%/20 ms | 200 ms |
 | Reversal dwell | `MotorReversalDwellMs` = 60 ms at zero | 60 ms |
 
