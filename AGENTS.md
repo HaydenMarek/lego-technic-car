@@ -29,3 +29,8 @@ third-party APIs, hardware, and protocols.
 If you discover a useful external resource during your work that would help
 future agents, append it to `EXTERNAL_DOCUMENTATION.md` (with a short
 description of what it covers and why it is useful).
+
+## GitHub
+
+Use GitHub CLI (`gh`) commands for GitHub operations, including working with
+issues, pull requests, checks, workflows, and releases.
