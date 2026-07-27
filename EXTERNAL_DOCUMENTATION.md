@@ -17,3 +17,8 @@
   lib/pbio/src/imu.c): heading accumulates across full turns
   (`heading_rotations * 360 + heading_projection`), so it is NOT wrapped to
   0..360; the assist wraps the heading error to [-180, 180] itself.
+
+- https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf
+  Official BTS7960 half-bridge datasheet. Covers electrical limits, protection
+  behavior, current-sense diagnostics, and PWM operation up to 25 kHz; useful
+  when validating PWM-frequency changes or adding current monitoring.

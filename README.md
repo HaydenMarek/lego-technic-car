@@ -69,8 +69,10 @@ D,-25
 STOP
 ```
 
-For `D,50`, the temporary motor driver prints `MOTOR,50`. After 500 ms without
-another valid command, it prints `MOTOR,0` and the failsafe message.
+For `D,50`, the default quadratic throttle curve targets 25% output, so the
+temporary motor driver ramps through `MOTOR,10` and `MOTOR,20` to `MOTOR,25`.
+After 500 ms without another valid command, it prints `MOTOR,0` and the
+failsafe message.
 
 Pure control behavior also has host-side checks that need only a C++17 compiler:
 
@@ -296,22 +298,25 @@ The motor output ramps in three phases instead of a single rate:
 
 | Phase | Rate | 0..100 / 100..0 time |
 | --- | --- | --- |
-| Acceleration | `MotorAccelStep` = 20%/20 ms | 100 ms |
+| Acceleration | `MotorAccelStep` = 10%/20 ms | 200 ms |
 | Deceleration | `MotorDecelStep` = 10%/20 ms | 200 ms |
 | Reversal dwell | `MotorReversalDwellMs` = 60 ms at zero | 60 ms |
 
-Acceleration is gentle (slower than deceleration) so the car spools up softly
-instead of slamming full battery voltage into a stalled motor in one tick.
-This matters because the firmware has no current limiting: an instantaneous
-0->100% step from rest drives a full stall-current spike through the winding,
-which can overheat and fry a brushed motor. The 5%/20 ms ramp reaches full
-output in 400 ms, fast enough to drive but soft enough to spare the motor on
-launch. Deceleration stays prompt so throttle is released and brakes applied
-quickly. A direction reversal decelerates to zero with the fast decel step,
-then holds at zero for a short dead-time (dwell) before ramping the opposite
-way, which avoids snapping the drivetrain backward. The dwell is abandoned
-early if the driver returns the throttle to neutral or reverses their choice,
-so the car stays responsive.
+Acceleration and deceleration use the same tested 10%/20 ms rate, reaching
+full output or zero in 200 ms for symmetric, responsive control. The ramp still
+avoids applying an instantaneous 0->100% step to a stalled motor, but the
+firmware has no current limiting, so motor current and temperature must be
+validated on the car. A direction reversal decelerates to zero, then holds at
+zero for a short dead-time (dwell) before ramping the opposite way, which
+avoids snapping the drivetrain backward. The dwell is abandoned early if the
+driver returns the throttle to neutral or reverses their choice, so the car
+stays responsive.
+
+USB serial-monitor commands are a bench-only control source. The `uno_bench`
+environment enables them with
+`-DTECHNIC_RC_ENABLE_MONITOR_COMMANDS=1`; the `uno_bts7960` production
+environment explicitly disables them so only the Technic Hub can command or
+refresh the vehicle watchdog.
 
 Optional dynamic braking is available for driver neutral. When enabled
 (`-DTECHNIC_RC_ENABLE_DYNAMIC_BRAKING=1`), the bridge shorts the motor at

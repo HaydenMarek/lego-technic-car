@@ -8,6 +8,10 @@
 #include "Vehicle.h"
 #include "Watchdog.h"
 
+#ifndef TECHNIC_RC_EXPECT_MONITOR_COMMANDS
+#error "Native tests require TECHNIC_RC_EXPECT_MONITOR_COMMANDS"
+#endif
+
 namespace {
 
 // Mirrors Vehicle::shapeThrottle so the drive tests stay correct for any
@@ -115,6 +119,39 @@ void protocolWritesStableReplies() {
   assert(stream.output() == expected);
 }
 
+void configuredBuildProfileMatchesExpectedUsbMonitorAccess() {
+  const bool expected = TECHNIC_RC_EXPECT_MONITOR_COMMANDS != 0;
+  assert(Config::EnableMonitorCommands == expected);
+}
+
+void motorAccelerationAndDecelerationReachFullScaleIn200Ms() {
+  FakeStream diagnostics;
+  MotorDriver motorDriver(diagnostics);
+  motorDriver.begin(0);
+
+  assert(Config::MotorRampIntervalMs == 20);
+  assert(Config::MotorAccelStep == 10);
+  assert(Config::MotorDecelStep == Config::MotorAccelStep);
+
+  motorDriver.setTarget(100);
+  motorDriver.update(19);
+  assert(motorDriver.applied() == 0);
+
+  for (uint32_t tick = 1; tick <= 10; ++tick) {
+    motorDriver.update(tick * 20);
+    assert(motorDriver.applied() == static_cast<int16_t>(tick * 10));
+  }
+  assert(motorDriver.applied() == 100);
+
+  motorDriver.setTarget(0);
+  for (uint32_t tick = 1; tick <= 10; ++tick) {
+    motorDriver.update(200 + tick * 20);
+    assert(motorDriver.applied() ==
+           static_cast<int16_t>(100 - tick * 10));
+  }
+  assert(motorDriver.applied() == 0);
+}
+
 void vehicleAppliesThrottleAndStops() {
   FakeStream diagnostics;
   MotorDriver motorDriver(diagnostics);
@@ -131,24 +168,23 @@ void vehicleAppliesThrottleAndStops() {
   assert(motorDriver.target() == forward);
   assert(motorDriver.applied() == 0);
 
-  // Acceleration is gentle: 5% per 20 ms, so 0..50 takes 200 ms (10 ticks).
+  // Acceleration advances by 10 percentage points per 20 ms.
   motorDriver.update(19);
   assert(motorDriver.applied() == 0);  // no tick yet
 
   motorDriver.update(20);
-  assert(motorDriver.applied() == 5);  // first accel tick
+  assert(motorDriver.applied() == 10);  // first accel tick
 
   motorDriver.update(200);
-  assert(motorDriver.applied() == forward);  // reached target after 200 ms
+  assert(motorDriver.applied() == forward);
 
   motorDriver.update(400);
   assert(motorDriver.applied() == forward);  // steady
 
-  // Reversal: decelerate to zero with the faster decel step (10%/20 ms) over
-  // 100 ms, then hold at zero for the 60 ms reversal dwell before ramping the
-  // opposite way.
+  // Reversal: decelerate to zero at the configured 10%/20 ms rate, then hold
+  // at zero for the 60 ms reversal dwell before ramping the opposite way.
   vehicle.setThrottle(-50);
-  motorDriver.update(500);  // 100 ms after 400: 5 ticks * 10% = 50 -> 0
+  motorDriver.update(500);  // batched update reaches zero and starts dwell
   assert(motorDriver.applied() == 0);
   assert(motorDriver.target() == reverse);
 
@@ -156,11 +192,11 @@ void vehicleAppliesThrottleAndStops() {
   motorDriver.update(540);
   assert(motorDriver.applied() == 0);
 
-  // Dwell expired; the next ticks accelerate backward at 5%/20 ms.
+  // Dwell expired; the next tick accelerates backward at 10%/20 ms.
   motorDriver.update(560);
-  assert(motorDriver.applied() == -5);
+  assert(motorDriver.applied() == -10);
 
-  motorDriver.update(760);  // 200 ms of accel after the dwell reaches -50
+  motorDriver.update(760);
   assert(motorDriver.applied() == reverse);
 
   // STOP forces an immediate coast regardless of dynamic braking.
@@ -254,6 +290,8 @@ int main() {
   protocolAcceptsIntentCommandsAndRejectsMalformedInput();
   protocolRecoversAfterOverflow();
   protocolWritesStableReplies();
+  configuredBuildProfileMatchesExpectedUsbMonitorAccess();
+  motorAccelerationAndDecelerationReachFullScaleIn200Ms();
   vehicleAppliesThrottleAndStops();
   dynamicBrakingEngagesAtNeutralButNotAfterStop();
   vehicleAppliesThrottleResponseCurve();

@@ -20,6 +20,13 @@
 #define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 0
 #endif
 
+// Accept protocol commands from the USB serial monitor. This is disabled by
+// default so a production build has only one control source. The uno_bench
+// environment enables it explicitly for interactive testing.
+#ifndef TECHNIC_RC_ENABLE_MONITOR_COMMANDS
+#define TECHNIC_RC_ENABLE_MONITOR_COMMANDS 0
+#endif
+
 // Throttle curve exponent. Raw -100..100 commands are shaped before reaching
 // the motor driver so the lower half of the trigger travel produces a smaller
 // fraction of motor output, giving finer low-speed control while still
@@ -68,14 +75,13 @@ constexpr bool EnableDynamicBraking = TECHNIC_RC_ENABLE_DYNAMIC_BRAKING != 0;
 // commands forward; do not swap motor wires while powered.
 constexpr bool InvertMotor = false;
 
-// Motor ramp. Acceleration is gentler than deceleration so the car spools up
-// softly instead of slamming full battery voltage into a stalled motor (which
-// risks cooking the winding with no current limiting), while throttle release
-// and braking stay prompt. A direction reversal decelerates to zero with the
-// fast decel step, then holds there for a short dead-time (dwell) before ramping
-// the opposite way, which avoids snapping the drivetrain backward.
+// Motor ramp. Acceleration and deceleration use the same tested 200 ms
+// full-range ramp for predictable, responsive control without an instantaneous
+// 0-to-100% step. A direction reversal decelerates to zero, then holds there for
+// a short dead-time (dwell) before ramping the opposite way, which avoids
+// snapping the drivetrain backward.
 constexpr uint32_t MotorRampIntervalMs = 20;
-constexpr int16_t MotorAccelStep = 20;     // 20%/20 ms   -> 100 ms 0..100
+constexpr int16_t MotorAccelStep = 10;     // 10%/20 ms  -> 200 ms 0..100
 constexpr int16_t MotorDecelStep = 10;    // 10%/20 ms  -> 200 ms 100..0
 constexpr uint32_t MotorReversalDwellMs = 60;  // dead-time at zero on reversal
 
@@ -88,7 +94,9 @@ constexpr uint8_t ThrottleCurveExponent = TECHNIC_RC_THROTTLE_CURVE_EXPONENT;
 
 constexpr size_t ProtocolBufferSize = 48;
 
-// Accept the same protocol through the USB serial monitor for bench testing.
-constexpr bool EnableMonitorCommands = true;
+// Accept the same protocol through the USB serial monitor when the selected
+// build environment explicitly enables this bench-only control source.
+constexpr bool EnableMonitorCommands =
+    TECHNIC_RC_ENABLE_MONITOR_COMMANDS != 0;
 
 }  // namespace Config
