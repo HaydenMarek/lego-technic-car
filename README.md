@@ -11,6 +11,13 @@ The Technic Hub owns the Xbox controller and Powered Up steering motor. The
 UART protocol carries throttle intent to the Arduino and deliberately contains
 no steering motor, PWM, or BTS7960 details.
 
+> [!WARNING]
+> The current revision has no hardware current protection: no fuse, hardware
+> current-protection circuit, or automatic hardware cutoff is installed.
+> Current sensing is not connected and the firmware does not limit current.
+> This is a known risk, and the motors have already needed repair. Hardware
+> current protection is planned for the next revision.
+
 ## Protocol
 
 Commands are ASCII lines terminated by `\n`:
@@ -304,13 +311,12 @@ The motor output ramps in three phases instead of a single rate:
 
 Acceleration and deceleration use the same tested 10%/20 ms rate, reaching
 full output or zero in 200 ms for symmetric, responsive control. The ramp still
-avoids applying an instantaneous 0->100% step to a stalled motor, but the
-firmware has no current limiting, so motor current and temperature must be
-validated on the car. A direction reversal decelerates to zero, then holds at
-zero for a short dead-time (dwell) before ramping the opposite way, which
-avoids snapping the drivetrain backward. The dwell is abandoned early if the
-driver returns the throttle to neutral or reverses their choice, so the car
-stays responsive.
+avoids applying an instantaneous 0->100% step to a stalled motor, but it is
+only throttle shaping and does not protect against excess current or motor
+heating. A direction reversal decelerates to zero, then holds at zero for a
+short dead-time (dwell) before ramping the opposite way, which avoids snapping
+the drivetrain backward. The dwell is abandoned early if the driver returns
+the throttle to neutral or reverses their choice, so the car stays responsive.
 
 USB serial-monitor commands are a bench-only control source. The `uno_bench`
 environment enables them with
@@ -345,7 +351,7 @@ directions:
        │
        └------------------- common ground ------ B- <--- 2S battery negative
 
- 2S battery positive --- fuse --- switch ------> B+
+ 2S battery positive ---------- switch ------> B+
 
  Buggy motor 1 wire 1 -------------------------> M+
  Buggy motor 1 wire 2 -------------------------> M-
@@ -359,7 +365,7 @@ The module normally has two high-current screw-terminal pairs:
 
 | BTS7960 terminal | Connect to |
 | --- | --- |
-| `B+` | 2S battery positive through the fuse and main switch |
+| `B+` | 2S battery positive through the main switch |
 | `B-` | 2S battery negative/common ground |
 | `M+` | First buggy-motor wire 1 and second buggy-motor wire 2 |
 | `M-` | First buggy-motor wire 2 and second buggy-motor wire 1 |
@@ -379,10 +385,10 @@ polarity can destroy the module.
 | `VCC` | Arduino 5 V logic supply |
 | `GND` | Arduino GND/common signal ground |
 
-Feed the module power terminals directly from the fused 2S motor-power
-distribution using appropriately rated wire and connectors. Do not connect
-motor battery positive to the Arduino `5V`, `VIN`, or logic `VCC` connection.
-For the first test, power the UNO from USB; only the grounds are joined.
+Feed the module power terminals from the 2S motor-power distribution using
+appropriately rated wire and connectors. Do not connect motor battery positive
+to the Arduino `5V`, `VIN`, or logic `VCC` connection. For the first test,
+power the UNO from USB; only the grounds are joined.
 
 During reset, Arduino pins are inputs. Add a 10 kΩ pull-down from each `R_EN`
 and `L_EN` line to ground unless the exact module is verified to provide them,
@@ -391,15 +397,18 @@ so the bridge remains disabled while the controller boots.
 ### Power safety
 
 - A 2S pack is about 7.4 V nominal and 8.4 V fully charged.
-- Keep the wheels unloaded for the first powered test, or use a current-limited
-  bench supply instead of the battery.
-- Install a main fuse close to the battery. Select it from measured motor stall
-  current and the ratings of the wiring, connectors, and modules—not from the
-  module's advertised "43 A" name.
-- A 2600 mAh 15C pack is nominally rated around 39 A, but its actual safe limit
-  depends on the specific pack and its protection circuitry.
-- Battery voltage monitoring is not implemented. Use a protected pack/BMS or
-  an external low-voltage alarm/cutoff suitable for a 2S Li-ion pack.
+- The present build has no hardware current protection: no fuse, hardware
+  current-protection circuit, or automatic hardware cutoff is installed. It
+  also has no measured-current feedback or firmware current limit.
+- The throttle ramp, watchdog, and emergency stop do not provide current
+  protection.
+- This unprotected arrangement is risky: the motors have already needed
+  repair. Adding properly selected hardware current protection is a target for
+  the next revision.
+- Keep the wheels unloaded during powered bench tests, avoid stalled-motor
+  operation, and disconnect power immediately if a motor or wire becomes hot.
+- Battery voltage monitoring and automatic low-voltage cutoff are also not
+  implemented.
 - Never power motor current through a breadboard or Arduino traces.
 - Power the Arduino and Hub/controller logic before connecting motor power.
   Disconnect motor power first when shutting the system down.
@@ -419,8 +428,10 @@ while powered down.
   output boundary
 - `Watchdog`: independent command timeout detection
 
-Battery monitoring, current and temperature sensing, telemetry, and the future
-binary protocol remain intentionally outside this phase.
+Hardware current protection, battery monitoring, current and temperature
+sensing, and automatic electrical cutoffs are not implemented in this revision.
+Hardware current protection is planned for the next revision. Telemetry and
+the future binary protocol also remain outside this phase.
 
 The gyro steering assist lives entirely in the Pybricks Hub programs; it
 is Hub-side logic over the steering motor and IMU and is not part of the

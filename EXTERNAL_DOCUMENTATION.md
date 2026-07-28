@@ -19,6 +19,7 @@
   0..360; the assist wraps the heading error to [-180, 180] itself.
 
 - https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf
-  Official BTS7960 half-bridge datasheet. Covers electrical limits, protection
-  behavior, current-sense diagnostics, and PWM operation up to 25 kHz; useful
-  when validating PWM-frequency changes or adding current monitoring.
+  Official BTS7960 half-bridge datasheet. Covers electrical limits,
+  current-sense diagnostics, and PWM operation up to 25 kHz; useful when
+  validating PWM-frequency changes and planning current monitoring for the
+  next hardware revision.
