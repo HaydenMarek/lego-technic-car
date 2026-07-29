@@ -17,7 +17,7 @@
 // the motor at zero output to oppose back-EMF instead of coasting. STOP,
 // failsafe, and startup always coast for safety regardless of this setting.
 #ifndef TECHNIC_RC_ENABLE_DYNAMIC_BRAKING
-#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 0
+#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 1
 #endif
 
 // Accept protocol commands from the USB serial monitor. This is disabled by
@@ -36,7 +36,7 @@
 // (50% trigger -> 25% output), 3 = cubic (50% -> 12%). Higher values soften
 // the low end more. Override per build with -DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=N.
 #ifndef TECHNIC_RC_THROTTLE_CURVE_EXPONENT
-#define TECHNIC_RC_THROTTLE_CURVE_EXPONENT 2
+#define TECHNIC_RC_THROTTLE_CURVE_EXPONENT 1
 #endif
 
 namespace Config {

@@ -62,7 +62,7 @@ STEERING_CURVE_EXPONENT = 2
 # ("help a little", not an autopilot) and the assist is disabled below a small
 # throttle so the steering never hunts while parked or coasting.
 
-ENABLE_GYRO_ASSIST = True
+ENABLE_GYRO_ASSIST = False
 
 # Heading-error gain: degrees of steering correction per degree of heading
 # error. Start small; increase until the car holds a straight line.
