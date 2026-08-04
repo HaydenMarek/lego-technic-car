@@ -50,6 +50,9 @@ ASSIST_YAW_RATE_PER_STEER = 3.0
 ASSIST_YAW_RATE_DEADBAND = 8
 ASSIST_FILTER_ALPHA = 0.25
 ASSIST_MAX = 12
+# This can traverse the full -12..12 range in one frame, preserving the
+# existing smoke-test response while sharing the slew-limited controller.
+ASSIST_CORRECTION_SLEW = 24
 ASSIST_THROTTLE_MIN = 5
 YAW_SIGN = 1
 ASSIST_DT = CONTROL_PERIOD_MS / 1000.0
@@ -65,19 +68,21 @@ class DriftAssist:
     """
 
     def __init__(self, gain, yaw_rate_per_steer, yaw_rate_deadband,
-                 filter_alpha, assist_max, always_active, throttle_min,
-                 yaw_sign, dt):
+                 filter_alpha, assist_max, correction_slew, always_active,
+                 throttle_min, yaw_sign, dt):
         self.gain = gain
         self.yaw_rate_per_steer = yaw_rate_per_steer
         self.yaw_rate_deadband = yaw_rate_deadband
         self.filter_alpha = filter_alpha
         self.assist_max = assist_max
+        self.correction_slew = correction_slew
         self.always_active = always_active
         self.throttle_min = throttle_min
         self.yaw_sign = yaw_sign
         self.dt = dt
         self.prev_heading = None
         self.filtered_yaw_rate = 0.0
+        self.correction = 0.0
 
     def step(self, driver_target, heading, forward_throttle):
         base = driver_target if driver_target is not None else 0
@@ -91,6 +96,7 @@ class DriftAssist:
 
         if not self.always_active and forward_throttle < self.throttle_min:
             self.filtered_yaw_rate = 0.0
+            self.correction = 0.0
             return base, 0.0
 
         self.filtered_yaw_rate += self.filter_alpha * (
@@ -123,6 +129,13 @@ class DriftAssist:
             correction = self.assist_max
         elif correction < -self.assist_max:
             correction = -self.assist_max
+
+        correction_change = correction - self.correction
+        if correction_change > self.correction_slew:
+            correction = self.correction + self.correction_slew
+        elif correction_change < -self.correction_slew:
+            correction = self.correction - self.correction_slew
+        self.correction = correction
 
         return base - correction, correction
 
@@ -235,8 +248,8 @@ async def main():
             assist = DriftAssist(
                 ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
-                ASSIST_MAX, ASSIST_ALWAYS_ACTIVE, ASSIST_THROTTLE_MIN,
-                YAW_SIGN, ASSIST_DT,
+                ASSIST_MAX, ASSIST_CORRECTION_SLEW, ASSIST_ALWAYS_ACTIVE,
+                ASSIST_THROTTLE_MIN, YAW_SIGN, ASSIST_DT,
             )
 
         while True:

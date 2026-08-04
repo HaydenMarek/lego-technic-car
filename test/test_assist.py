@@ -11,19 +11,21 @@ import sys
 
 class DriftAssist:
     def __init__(self, gain, yaw_rate_per_steer, yaw_rate_deadband,
-                 filter_alpha, assist_max, always_active, throttle_min,
-                 yaw_sign, dt):
+                 filter_alpha, assist_max, correction_slew, always_active,
+                 throttle_min, yaw_sign, dt):
         self.gain = gain
         self.yaw_rate_per_steer = yaw_rate_per_steer
         self.yaw_rate_deadband = yaw_rate_deadband
         self.filter_alpha = filter_alpha
         self.assist_max = assist_max
+        self.correction_slew = correction_slew
         self.always_active = always_active
         self.throttle_min = throttle_min
         self.yaw_sign = yaw_sign
         self.dt = dt
         self.prev_heading = None
         self.filtered_yaw_rate = 0.0
+        self.correction = 0.0
 
     def step(self, driver_target, heading, forward_throttle):
         base = driver_target if driver_target is not None else 0
@@ -37,6 +39,7 @@ class DriftAssist:
 
         if not self.always_active and forward_throttle < self.throttle_min:
             self.filtered_yaw_rate = 0.0
+            self.correction = 0.0
             return base, 0.0
 
         self.filtered_yaw_rate += self.filter_alpha * (
@@ -70,6 +73,13 @@ class DriftAssist:
         elif correction < -self.assist_max:
             correction = -self.assist_max
 
+        correction_change = correction - self.correction
+        if correction_change > self.correction_slew:
+            correction = self.correction + self.correction_slew
+        elif correction_change < -self.correction_slew:
+            correction = self.correction - self.correction_slew
+        self.correction = correction
+
         return base - correction, correction
 
 
@@ -88,10 +98,10 @@ def close(actual, expected):
 
 
 def make(gain=0.1, rate_per_steer=3.0, deadband=0.0, alpha=1.0,
-         amax=12, always_active=False, tmin=5, yaw=1, dt=0.02):
+         amax=12, slew=1000, always_active=False, tmin=5, yaw=1, dt=0.02):
     return DriftAssist(
-        gain, rate_per_steer, deadband, alpha, amax, always_active, tmin,
-        yaw, dt
+        gain, rate_per_steer, deadband, alpha, amax, slew, always_active,
+        tmin, yaw, dt
     )
 
 
@@ -209,6 +219,7 @@ def throttle_gate_excludes_stopped_and_reverse():
     _, correction = assist.step(0, 2.0, 0)
     check("gate.stopped", correction == 0.0)
     check("gate.stopped_filter_reset", assist.filtered_yaw_rate == 0.0)
+    check("gate.stopped_correction_reset", assist.correction == 0.0)
 
     _, correction = assist.step(0, 4.0, -50)
     check("gate.reverse", correction == 0.0)
@@ -245,6 +256,25 @@ def correction_is_clamped():
           "got {0}".format(correction))
 
 
+def correction_slew_limits_steps_and_reversals():
+    assist = make(gain=1.0, amax=100, slew=8)
+    assist.step(0, 0.0, 50)
+
+    _, correction = assist.step(0, 2.0, 50)
+    check("slew.first_step", close(correction, 8.0),
+          "got {0}".format(correction))
+
+    _, correction = assist.step(0, 4.0, 50)
+    check("slew.second_step", close(correction, 16.0),
+          "got {0}".format(correction))
+
+    # Requested correction reverses from +100 to -100, but the applied
+    # correction can move only 8 degrees instead of jumping sides.
+    _, correction = assist.step(0, 2.0, 50)
+    check("slew.reversal", close(correction, 8.0),
+          "got {0}".format(correction))
+
+
 def yaw_sign_flips_sensor_mapping():
     assist = make(gain=0.1, amax=100, yaw=-1)
     assist.step(0, 0.0, 50)
@@ -266,6 +296,7 @@ def main():
     throttle_gate_excludes_stopped_and_reverse()
     always_active_includes_stopped_and_reverse()
     correction_is_clamped()
+    correction_slew_limits_steps_and_reversals()
     yaw_sign_flips_sensor_mapping()
 
     if FAILURES:

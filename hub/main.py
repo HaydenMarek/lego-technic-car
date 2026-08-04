@@ -77,6 +77,9 @@ ASSIST_YAW_RATE_DEADBAND = 2
 ASSIST_FILTER_ALPHA = 0.65
 # Maximum corrective offset in degrees either way.
 ASSIST_MAX = 80
+# Maximum correction change per 20 ms control frame. This limits the command
+# slew to 400 deg/s and prevents instant full-left/full-right reversals.
+ASSIST_CORRECTION_SLEW = 8
 # Fallback gate used only when ASSIST_ALWAYS_ACTIVE is False.
 ASSIST_THROTTLE_MIN = 5
 # Flip to -1 if the correction reinforces a slide instead of counter-steering.
@@ -97,19 +100,21 @@ class DriftAssist:
     """
 
     def __init__(self, gain, yaw_rate_per_steer, yaw_rate_deadband,
-                 filter_alpha, assist_max, always_active, throttle_min,
-                 yaw_sign, dt):
+                 filter_alpha, assist_max, correction_slew, always_active,
+                 throttle_min, yaw_sign, dt):
         self.gain = gain
         self.yaw_rate_per_steer = yaw_rate_per_steer
         self.yaw_rate_deadband = yaw_rate_deadband
         self.filter_alpha = filter_alpha
         self.assist_max = assist_max
+        self.correction_slew = correction_slew
         self.always_active = always_active
         self.throttle_min = throttle_min
         self.yaw_sign = yaw_sign
         self.dt = dt
         self.prev_heading = None
         self.filtered_yaw_rate = 0.0
+        self.correction = 0.0
 
     def step(self, driver_target, heading, forward_throttle):
         """Return the assist-corrected steering target for this frame.
@@ -140,6 +145,7 @@ class DriftAssist:
         # always_active enabled so hand rotation produces visible counter-steer.
         if not self.always_active and forward_throttle < self.throttle_min:
             self.filtered_yaw_rate = 0.0
+            self.correction = 0.0
             return base, 0.0
 
         self.filtered_yaw_rate += self.filter_alpha * (
@@ -177,6 +183,16 @@ class DriftAssist:
             correction = self.assist_max
         elif correction < -self.assist_max:
             correction = -self.assist_max
+
+        # Limit how quickly correction can change, especially during a yaw
+        # reversal. Full authority remains available, but it is reached over
+        # several frames instead of commanding opposite lock instantly.
+        correction_change = correction - self.correction
+        if correction_change > self.correction_slew:
+            correction = self.correction + self.correction_slew
+        elif correction_change < -self.correction_slew:
+            correction = self.correction - self.correction_slew
+        self.correction = correction
 
         return base - correction, correction
 
@@ -351,8 +367,8 @@ async def main():
             assist = DriftAssist(
                 ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
-                ASSIST_MAX, ASSIST_ALWAYS_ACTIVE, ASSIST_THROTTLE_MIN,
-                YAW_SIGN, ASSIST_DT,
+                ASSIST_MAX, ASSIST_CORRECTION_SLEW, ASSIST_ALWAYS_ACTIVE,
+                ASSIST_THROTTLE_MIN, YAW_SIGN, ASSIST_DT,
             )
 
         # A must be released and newly pressed while both triggers are neutral.

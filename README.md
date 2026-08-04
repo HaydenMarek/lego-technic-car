@@ -88,7 +88,7 @@ STOP
 ```
 
 For `D,50`, the default quadratic throttle curve targets 25% output, so the
-temporary motor driver ramps through `MOTOR,10` and `MOTOR,20` to `MOTOR,25`.
+temporary motor driver ramps through `MOTOR,20` to `MOTOR,25`.
 After 500 ms without another valid command, it prints `MOTOR,0` and the
 failsafe message.
 
@@ -187,15 +187,26 @@ an intentional turn or add steering to make the turn start faster. Rotation
 beyond the allowance is the `excess_yaw_rate`. If the driver counter-steers
 opposite the current rotation, all of the measured rate is considered excess,
 so the gyro complements the driver's recovery input. After filtering and
-removing the yaw-rate deadband:
+removing the yaw-rate deadband, proportional yaw-rate feedback calculates a
+requested correction:
 
 ```
-correction = ASSIST_GAIN * excess_yaw_rate
+requested_correction = ASSIST_GAIN * excess_yaw_rate
+```
+
+The request is clamped to `ASSIST_MAX`, then an output slew limiter permits at
+most `ASSIST_CORRECTION_SLEW` degrees of change per 20 ms frame:
+
+```
+change     = clamp(requested_correction - previous_correction, -slew, +slew)
+correction = previous_correction + change
 target     = driver_target - correction
 ```
 
-The correction is clamped to `ASSIST_MAX` degrees and the final target is
-clamped to the calibrated steering limits. The production program sets
+This is proportional yaw-rate stabilization with input filtering and
+output-rate limiting, not a full PID. There is deliberately no integral term to
+wind up and hold stale correction. The final target is clamped to the
+calibrated steering limits. The production program sets
 `ASSIST_ALWAYS_ACTIVE = True`, so assist starts immediately after steering
 calibration, remains active before arming, and also operates while parked,
 coasting, or reversing. Arduino drive output remains stopped before arming, so
@@ -216,9 +227,10 @@ Defaults:
 | `ASSIST_ALWAYS_ACTIVE` | `True` | `False` | Bypass the forward-throttle gate |
 | `ASSIST_GAIN` | `1.75` | `0.10` | deg steering / (deg/s excess yaw) |
 | `ASSIST_YAW_RATE_PER_STEER` | `3.0` | `3.0` | permitted deg/s yaw per deg of driver steering |
-| `ASSIST_YAW_RATE_DEADBAND` | `0` | `8` | ignored excess yaw rate in deg/s |
-| `ASSIST_FILTER_ALPHA` | `1.00` | `0.25` | yaw-rate low-pass coefficient; lower is smoother |
+| `ASSIST_YAW_RATE_DEADBAND` | `2` | `8` | ignored excess yaw rate in deg/s |
+| `ASSIST_FILTER_ALPHA` | `0.65` | `0.25` | yaw-rate low-pass coefficient; lower is smoother |
 | `ASSIST_MAX` | `80` | `12` | maximum correction in deg |
+| `ASSIST_CORRECTION_SLEW` | `8` | `24` | maximum correction change per 20 ms frame |
 | `ASSIST_THROTTLE_MIN` | `5` | `5` | gate threshold when always-active mode is off |
 | `YAW_SIGN` | `1` | `1` | flip to `-1` if the correction fights the car |
 
@@ -228,10 +240,10 @@ the wheels should steer counterclockwise. Flip `YAW_SIGN` if they steer with
 the rotation. Tune `ASSIST_GAIN` first, then increase
 `ASSIST_YAW_RATE_PER_STEER` if normal turns still feel resisted. Reduce
 `ASSIST_MAX` if recoveries are too abrupt, or reduce `ASSIST_FILTER_ALPHA` if
-the steering chatters. The production profile is the midpoint between the
-tested `1.00`/60-degree and `2.50`/100-degree profiles: `1.75` gain, no
-deadband or filtering delay, and up to 80 degrees of correction before the
-calibrated mechanical-limit clamp.
+the steering chatters. The production profile retains the tested midpoint gain
+and authority (`1.75` and 80 degrees), but adds a 2 deg/s deadband, moderate
+input filtering, and an 8-degree-per-frame output slew limit to suppress the
+observed rapid full-left/full-right oscillation.
 
 The pure control law is `DriftAssist` in both Hub programs and is mirrored by
 `test/test_assist.py` (run with `./test/run-python-tests.sh`).
@@ -332,22 +344,29 @@ controllable. Raise the exponent to soften the low end further, or set it to
 after the UART command is parsed, so it covers both the Hub link and the USB
 serial monitor, and it is independent of the motor ramp below.
 
-The motor output ramps in three phases instead of a single rate:
+The motor output uses separate rates for acceleration, ordinary deceleration,
+and a requested direction reversal:
 
 | Phase | Rate | 0..100 / 100..0 time |
 | --- | --- | --- |
-| Acceleration | `MotorAccelStep` = 10%/20 ms | 200 ms |
-| Deceleration | `MotorDecelStep` = 10%/20 ms | 200 ms |
+| Acceleration | `MotorAccelStep` = 20%/20 ms | 100 ms |
+| Neutral or same-direction deceleration | `MotorDecelStep` = 2%/20 ms | 1 second |
+| Opposite-trigger deceleration | `MotorReversalDecelStep` = 10%/20 ms | 200 ms |
 | Reversal dwell | `MotorReversalDwellMs` = 60 ms at zero | 60 ms |
 
-Acceleration and deceleration use the same tested 10%/20 ms rate, reaching
-full output or zero in 200 ms for symmetric, responsive control. The ramp still
-avoids applying an instantaneous 0->100% step to a stalled motor, but it is
-only throttle shaping and does not protect against excess current or motor
-heating. A direction reversal decelerates to zero, then holds at zero for a
-short dead-time (dwell) before ramping the opposite way, which avoids snapping
-the drivetrain backward. The dwell is abandoned early if the driver returns
-the throttle to neutral or reverses their choice, so the car stays responsive.
+Acceleration uses an aggressive 20%/20 ms rate and reaches full output in
+100 ms, preserving a short current and drivetrain ramp without dulling launch
+response.
+Deceleration is deliberately gentler at 2%/20 ms, taking 1 second from full
+output to zero so releasing the trigger unloads the LEGO drivetrain gradually.
+Pulling the opposite trigger interrupts that gentle ramp immediately: the
+current direction then decelerates at 10%/20 ms, reaches zero in at most
+200 ms, holds at zero for the 60 ms reversal dwell, and accelerates in the
+requested direction. This makes the opposite trigger responsive without
+snapping the drivetrain directly from forward power into reverse power.
+The ramp is only throttle shaping and does not protect against excess current
+or motor heating. The dwell is abandoned early if the driver returns the
+throttle to neutral or reverses their choice, so the car stays responsive.
 
 USB serial-monitor commands are a bench-only control source. The `uno_bench`
 environment enables them with

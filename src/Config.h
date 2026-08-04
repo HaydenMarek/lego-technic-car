@@ -17,7 +17,7 @@
 // the motor at zero output to oppose back-EMF instead of coasting. STOP,
 // failsafe, and startup always coast for safety regardless of this setting.
 #ifndef TECHNIC_RC_ENABLE_DYNAMIC_BRAKING
-#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 1
+#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 0
 #endif
 
 // Accept protocol commands from the USB serial monitor. This is disabled by
@@ -186,14 +186,15 @@ constexpr bool EnableDynamicBraking = TECHNIC_RC_ENABLE_DYNAMIC_BRAKING != 0;
 // commands forward; do not swap motor wires while powered.
 constexpr bool InvertMotor = false;
 
-// Motor ramp. Acceleration and deceleration use the same tested 200 ms
-// full-range ramp for predictable, responsive control without an instantaneous
-// 0-to-100% step. A direction reversal decelerates to zero, then holds there for
-// a short dead-time (dwell) before ramping the opposite way, which avoids
-// snapping the drivetrain backward.
+// Motor ramp. Acceleration reaches full output in 100 ms. Releasing the trigger
+// decelerates gently over 1 second, but an opposite-direction command interrupts
+// that gentle ramp and decelerates to zero in at most 200 ms so reversing feels
+// responsive. Every reversal still holds at zero briefly before applying power
+// in the opposite direction.
 constexpr uint32_t MotorRampIntervalMs = 20;
-constexpr int16_t MotorAccelStep = 10;     // 10%/20 ms  -> 200 ms 0..100
-constexpr int16_t MotorDecelStep = 10;    // 10%/20 ms  -> 200 ms 100..0
+constexpr int16_t MotorAccelStep = 20;       // 20%/20 ms -> 100 ms 0..100
+constexpr int16_t MotorDecelStep = 2;        // 2%/20 ms  -> 1 s 100..0
+constexpr int16_t MotorReversalDecelStep = 10;  // 10%/20 ms -> 200 ms
 constexpr uint32_t MotorReversalDwellMs = 60;  // dead-time at zero on reversal
 
 constexpr int16_t ThrottleMinimum = -100;

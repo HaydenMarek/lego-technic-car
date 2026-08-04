@@ -356,32 +356,64 @@ void motorPowerLimitClampsLiveOutputInBothDirections() {
   assert(motorDriver.target() == -100);
 }
 
-void motorAccelerationAndDecelerationReachFullScaleIn200Ms() {
+void motorAccelerationTakes100MsAndDecelerationTakesOneSecond() {
   FakeStream diagnostics;
   MotorDriver motorDriver(diagnostics);
   motorDriver.begin(0);
 
   assert(Config::MotorRampIntervalMs == 20);
-  assert(Config::MotorAccelStep == 10);
-  assert(Config::MotorDecelStep == Config::MotorAccelStep);
+  assert(Config::MotorAccelStep == 20);
+  assert(Config::MotorDecelStep == 2);
+  assert(Config::MotorReversalDecelStep == 10);
 
   motorDriver.setTarget(100);
   motorDriver.update(19);
   assert(motorDriver.applied() == 0);
 
-  for (uint32_t tick = 1; tick <= 10; ++tick) {
+  for (uint32_t tick = 1; tick <= 5; ++tick) {
     motorDriver.update(tick * 20);
-    assert(motorDriver.applied() == static_cast<int16_t>(tick * 10));
+    assert(motorDriver.applied() == static_cast<int16_t>(tick * 20));
   }
   assert(motorDriver.applied() == 100);
 
   motorDriver.setTarget(0);
-  for (uint32_t tick = 1; tick <= 10; ++tick) {
-    motorDriver.update(200 + tick * 20);
+  for (uint32_t tick = 1; tick <= 50; ++tick) {
+    motorDriver.update(100 + tick * 20);
     assert(motorDriver.applied() ==
-           static_cast<int16_t>(100 - tick * 10));
+           static_cast<int16_t>(100 - tick * 2));
   }
   assert(motorDriver.applied() == 0);
+}
+
+void oppositeTriggerInterruptsGentleNeutralDeceleration() {
+  FakeStream diagnostics;
+  MotorDriver motorDriver(diagnostics);
+  motorDriver.begin(0);
+
+  motorDriver.setTarget(100);
+  motorDriver.update(200);
+  assert(motorDriver.applied() == 100);
+
+  // Neutral starts the gentle 2%/20 ms ramp.
+  motorDriver.setTarget(0);
+  motorDriver.update(400);
+  assert(motorDriver.applied() == 80);
+
+  // An opposite trigger replaces the neutral target immediately and uses the
+  // faster 10%/20 ms reversal deceleration.
+  motorDriver.setTarget(-100);
+  motorDriver.update(420);
+  assert(motorDriver.target() == -100);
+  assert(motorDriver.applied() == 70);
+
+  motorDriver.update(560);
+  assert(motorDriver.applied() == 0);
+
+  // The existing 60 ms zero-output dwell still protects the drivetrain.
+  motorDriver.update(600);
+  assert(motorDriver.applied() == 0);
+  motorDriver.update(620);
+  assert(motorDriver.applied() == -20);
 }
 
 void vehicleAppliesThrottleAndStops() {
@@ -400,12 +432,12 @@ void vehicleAppliesThrottleAndStops() {
   assert(motorDriver.target() == forward);
   assert(motorDriver.applied() == 0);
 
-  // Acceleration advances by 10 percentage points per 20 ms.
+  // Acceleration advances by 20 percentage points per 20 ms.
   motorDriver.update(19);
   assert(motorDriver.applied() == 0);  // no tick yet
 
   motorDriver.update(20);
-  assert(motorDriver.applied() == 10);  // first accel tick
+  assert(motorDriver.applied() == 20);  // first accel tick
 
   motorDriver.update(200);
   assert(motorDriver.applied() == forward);
@@ -413,22 +445,22 @@ void vehicleAppliesThrottleAndStops() {
   motorDriver.update(400);
   assert(motorDriver.applied() == forward);  // steady
 
-  // Reversal: decelerate to zero at the configured 10%/20 ms rate, then hold
-  // at zero for the 60 ms reversal dwell before ramping the opposite way.
+  // Reversal: decelerate at the responsive 10%/20 ms rate, then hold at zero
+  // for the 60 ms reversal dwell before ramping the opposite way.
   vehicle.setThrottle(-50);
-  motorDriver.update(500);  // batched update reaches zero and starts dwell
+  motorDriver.update(600);  // reaches zero and starts dwell
   assert(motorDriver.applied() == 0);
   assert(motorDriver.target() == reverse);
 
-  // Reversal dwell: still held at zero at 540 ms (within the 60 ms window).
-  motorDriver.update(540);
+  // Reversal dwell: still held at zero at 640 ms (within the 60 ms window).
+  motorDriver.update(640);
   assert(motorDriver.applied() == 0);
 
-  // Dwell expired; the next tick accelerates backward at 10%/20 ms.
-  motorDriver.update(560);
-  assert(motorDriver.applied() == -10);
+  // Dwell expired; the next tick accelerates backward at 20%/20 ms.
+  motorDriver.update(660);
+  assert(motorDriver.applied() == -20);
 
-  motorDriver.update(760);
+  motorDriver.update(860);
   assert(motorDriver.applied() == reverse);
 
   // STOP forces an immediate coast regardless of dynamic braking.
@@ -452,17 +484,20 @@ void dynamicBrakingEngagesAtNeutralButNotAfterStop() {
   motorDriver.begin(0);
   assert(!motorDriver.brakingActive());  // startup coasts
 
-  // setThrottle shapes through the response curve; the applied value is the
-  // shaped target, not the raw 50.
-  const int16_t drive = curveShape(50);
-  vehicle.setThrottle(50);
+  // Full throttle remains full scale through every configured response curve.
+  const int16_t drive = curveShape(100);
+  vehicle.setThrottle(100);
   motorDriver.update(200);
   assert(motorDriver.applied() == drive);
   assert(!motorDriver.brakingActive());  // driving, not braking
 
-  // Driver neutral: decelerate to zero, then the bridge shorts to brake.
+  // Driver neutral: decelerate gently before the bridge shorts to brake.
   vehicle.setThrottle(0);
   motorDriver.update(400);
+  assert(motorDriver.applied() == 80);
+  assert(!motorDriver.brakingActive());
+
+  motorDriver.update(1200);
   assert(motorDriver.applied() == 0);
   assert(motorDriver.brakingActive());
 
@@ -528,7 +563,8 @@ int main() {
   currentProtectionFoldsBackAfterPersistenceAndRecoversSlowly();
   currentProtectionTripsPersistentOverloadAtMinimumPower();
   motorPowerLimitClampsLiveOutputInBothDirections();
-  motorAccelerationAndDecelerationReachFullScaleIn200Ms();
+  motorAccelerationTakes100MsAndDecelerationTakesOneSecond();
+  oppositeTriggerInterruptsGentleNeutralDeceleration();
   vehicleAppliesThrottleAndStops();
   dynamicBrakingEngagesAtNeutralButNotAfterStop();
   vehicleAppliesThrottleResponseCurve();

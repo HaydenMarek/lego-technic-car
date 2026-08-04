@@ -36,12 +36,13 @@ int16_t rampChannel(int16_t applied,
   const int8_t appliedSign = sign(applied);
   const int8_t targetSign = sign(target);
 
-  // Direction reversal: decelerate to zero with the faster decel step, then
-  // arm a short dead-time (dwell) at zero before ramping the opposite way so
-  // the drivetrain is not snapped backward.
+  // Direction reversal interrupts the gentle neutral ramp: decelerate to zero
+  // at the faster reversal rate, then arm a short dead-time (dwell) before
+  // ramping the opposite way. This responds promptly without snapping the
+  // drivetrain directly from one direction into the other.
   if (applied != 0 && target != 0 && appliedSign != targetSign) {
     const int32_t amount = static_cast<int32_t>(intervals) *
-                           Config::MotorDecelStep;
+                           Config::MotorReversalDecelStep;
     const int16_t next = approach(applied, 0, amount);
     if (next == 0) {
       reversalUntilMs = now + Config::MotorReversalDwellMs;
@@ -63,8 +64,8 @@ int16_t rampChannel(int16_t applied,
   }
 
   // Normal ramp: accelerate away from zero (magnitude increasing) with the
-  // slower accel step, or decelerate toward it (magnitude decreasing) with the
-  // faster decel step.
+  // acceleration step, or decelerate toward it (magnitude decreasing) with the
+  // gentler deceleration step.
   const int16_t step = magnitude(target) > magnitude(applied)
                            ? Config::MotorAccelStep
                            : Config::MotorDecelStep;
