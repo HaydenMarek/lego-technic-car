@@ -72,9 +72,9 @@ ASSIST_GAIN = 1.75
 # lets the car follow intentional turns without the gyro fighting the driver.
 ASSIST_YAW_RATE_PER_STEER = 3.0
 # Ignore small excess rates to prevent steering chatter from gyro noise.
-ASSIST_YAW_RATE_DEADBAND = 0
+ASSIST_YAW_RATE_DEADBAND = 2
 # Low-pass coefficient for yaw rate (0..1). Lower is smoother but reacts later.
-ASSIST_FILTER_ALPHA = 1.00
+ASSIST_FILTER_ALPHA = 0.65
 # Maximum corrective offset in degrees either way.
 ASSIST_MAX = 80
 # Fallback gate used only when ASSIST_ALWAYS_ACTIVE is False.

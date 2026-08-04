@@ -13,11 +13,13 @@ class MotorDriver final {
 
   void begin(uint32_t now);
   void setTarget(int16_t target);
+  void setPowerLimit(uint8_t maximum);
   void update(uint32_t now);
   void stop();
 
   int16_t target() const;
   int16_t applied() const;
+  uint8_t powerLimit() const;
 
   // True when the last output write shorted the bridge to brake the motor. Only
   // ever true for driver neutral; STOP, failsafe, and startup always coast.
@@ -26,6 +28,7 @@ class MotorDriver final {
  private:
   static int16_t clamp(int16_t value);
   static uint8_t toPwm(int16_t magnitude);
+  int16_t applyPowerLimit(int16_t value) const;
 
   static void configureBridge(const Config::Bts7960Pins& pins);
   static void writeBridge(const Config::Bts7960Pins& pins,
@@ -39,6 +42,7 @@ class MotorDriver final {
   Print& diagnostics_;
   int16_t target_ = 0;
   int16_t applied_ = 0;
+  uint8_t powerLimit_ = 100;
   uint32_t lastRampMs_ = 0;
   uint32_t reversalUntilMs_ = 0;
   int8_t reversalSign_ = 0;

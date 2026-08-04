@@ -88,10 +88,28 @@ void MotorDriver::begin(uint32_t now) {
 }
 
 void MotorDriver::setTarget(int16_t target) {
-  target_ = clamp(target);
+  target_ = applyPowerLimit(clamp(target));
   // A fresh drive command resumes normal output policy, so driver-neutral
   // braking becomes allowed again at the next zero crossing.
   forceCoast_ = false;
+}
+
+void MotorDriver::setPowerLimit(uint8_t maximum) {
+  if (maximum > Config::ThrottleMaximum) {
+    maximum = Config::ThrottleMaximum;
+  }
+  if (maximum == powerLimit_) {
+    return;
+  }
+
+  powerLimit_ = maximum;
+  target_ = applyPowerLimit(target_);
+
+  const int16_t limitedApplied = applyPowerLimit(applied_);
+  if (limitedApplied != applied_) {
+    applied_ = limitedApplied;
+    writeOutputs();
+  }
 }
 
 void MotorDriver::update(uint32_t now) {
@@ -135,6 +153,8 @@ int16_t MotorDriver::target() const { return target_; }
 
 int16_t MotorDriver::applied() const { return applied_; }
 
+uint8_t MotorDriver::powerLimit() const { return powerLimit_; }
+
 bool MotorDriver::brakingActive() const { return brakingActive_; }
 
 int16_t MotorDriver::clamp(int16_t value) {
@@ -152,6 +172,15 @@ uint8_t MotorDriver::toPwm(int16_t magnitude) {
   return static_cast<uint8_t>(
       static_cast<int32_t>(positive) * UINT8_MAX /
       Config::ThrottleMaximum);
+}
+
+int16_t MotorDriver::applyPowerLimit(int16_t value) const {
+  const int16_t absolute = value < 0 ? static_cast<int16_t>(-value) : value;
+  if (absolute <= powerLimit_) {
+    return value;
+  }
+  const int16_t limited = static_cast<int16_t>(powerLimit_);
+  return value < 0 ? static_cast<int16_t>(-limited) : limited;
 }
 
 void MotorDriver::configureBridge(const Config::Bts7960Pins& pins) {

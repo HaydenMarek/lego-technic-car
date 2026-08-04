@@ -14,10 +14,11 @@ no steering motor, PWM, or BTS7960 details.
 > [!WARNING]
 > The current revision has no hardware current protection: no fuse, hardware
 > current-protection circuit, or automatic hardware cutoff is installed.
-> The production firmware now has a measured-current software cutoff, but it
-> cannot protect against an Arduino crash, wiring fault, incorrect calibration,
-> or power-stage failure. This is a known risk, and the motors have already
-> needed repair. Proper hardware current protection is still required.
+> The production firmware has measured-current software foldback plus a final
+> emergency cutoff, but it cannot protect against an Arduino crash, wiring
+> fault, incorrect calibration, or power-stage failure. This is a known risk,
+> and the motors have already needed repair. Proper hardware current protection
+> is still required.
 
 ## Protocol
 
@@ -27,8 +28,8 @@ Commands are ASCII lines terminated by `\n`:
 | --- | --- | --- |
 | `PING` | `PONG` | Link test; does not refresh drive intent |
 | `MODE` | `MODE,BENCH` or `MODE,BTS7960` | Report active output backend |
-| `STOP` | `ACK,STOP` | Stop the motor target, clear a latched software current fault, and refresh the watchdog |
-| `D,<throttle>` | none by default (optional `ACK,D,<throttle>`) | Apply throttle unless current protection is latched, and refresh the watchdog |
+| `STOP` | `ACK,STOP` | Stop the motor target, reset current foldback or a latched emergency fault, and refresh the watchdog |
+| `D,<throttle>` | none by default (optional `ACK,D,<throttle>`) | Apply throttle within the active current power limit unless the emergency cutoff is latched, and refresh the watchdog |
 | Invalid input | `ERR` | No state change and no watchdog refresh |
 
 Throttle must be an integer from -100 to 100. The same target drives the single
@@ -40,10 +41,14 @@ stops the vehicle. `PING` cannot keep stale throttle alive. `millis()` rollover
 is handled by unsigned subtraction. Command refresh and timeout evaluation use
 the same loop timestamp to avoid false timeouts at millisecond boundaries.
 
-The production current cutoff immediately coasts the bridge after three
-consecutive above-limit current samples. It then ignores drive commands until
-an explicit `STOP` or controller reset clears the latched fault. `STOP` keeps
-the motor stopped while clearing the latch.
+Production current protection folds the allowed motor power back by 20
+percentage points after three consecutive above-limit samples, down to a
+minimum 20% output. Twenty safe samples restore five percentage points, so
+recovery takes at least 100 ms per step. If current remains over the limit for
+ten consecutive samples while already at minimum power, the emergency cutoff
+coasts the bridge and latches. It then ignores drive commands until an explicit
+`STOP` or controller reset clears the fault. `STOP` also resets an active
+foldback limit to 100% while keeping the motor stopped.
 
 ### Control latency
 
@@ -428,7 +433,36 @@ During reset, Arduino pins are inputs. Add a 10 kΩ pull-down from each `R_EN`
 and `L_EN` line to ground unless the exact module is verified to provide them,
 so the bridge remains disabled while the controller boots.
 
-### Current sensing and software cutoff
+### Production Arduino power filtering
+
+For untethered operation, power the Arduino logic from a regulated 5 V buck
+converter on a separate branch from the 2S battery. Motor launch transients
+were observed to interrupt operation when using the buck alone even though a
+multimeter showed no visible 5 V change and the power LED remained lit. Local
+bulk decoupling at the Arduino resolved the observed stops.
+
+Fit a 470--1000 µF electrolytic capacitor rated for at least 10 V directly
+between Arduino `5V` and `GND`, with its positive terminal on `5V`, plus a
+100 nF ceramic capacitor in parallel. Keep both capacitor leads and the buck
+output wiring short:
+
+```text
+ Buck +5V ----------+---------- Arduino 5V
+                    |
+                   +| 470--1000 µF electrolytic
+                    |  plus 100 nF ceramic
+                   -|
+                    |
+ Buck GND ----------+---------- Arduino GND
+```
+
+This filtering covers brief supply dips and high-frequency noise; it does not
+compensate for a sustained buck-converter shutdown or an undersized supply.
+Verify approximately 5.0 V at the Arduino under load. Do not feed regulated
+5 V into `VIN`, and do not connect USB power simultaneously with a supply wired
+directly to the `5V` rail unless the two sources are properly isolated.
+
+### Current sensing, foldback, and emergency cutoff
 
 The production build samples `L_IS` on A0 and `R_IS` on A1 every 5 ms. Every
 100 ms it prints the peak raw 10-bit ADC count seen on each channel to the USB
@@ -464,8 +498,8 @@ different raw scaling. Protection therefore uses the directly measured raw
 counts rather than pretending both channels share an accurate amp calibration.
 
 All calibration runs had wheelspin rather than a mechanically locked
-drivetrain. The largest observed peaks were `L_IS=101` and `R_IS=50`. Initial
-thresholds are set 10% above those peaks:
+drivetrain. The largest observed peaks were `L_IS=101` and `R_IS=50`. The
+thresholds remain 10% above those peaks:
 
 | Channel | Highest wheelspin peak | Trip threshold | Nominal current equivalent |
 | --- | ---: | ---: | ---: |
@@ -474,40 +508,53 @@ thresholds are set 10% above those peaks:
 
 Both channels are checked whenever motor output is nonzero because an IS output
 also acts as a BTS7960 fault indication. A reading equal to or above its
-threshold must occur in three consecutive 5 ms samples before the cutoff trips.
-This rejects an isolated PWM/noise peak while cutting a sustained overload in
-roughly 10--15 ms. On a trip the bridge is coasted before USB diagnostics are
-printed:
+threshold must occur in three consecutive 5 ms samples before foldback. This
+rejects an isolated PWM/noise peak. Each foldback event immediately clamps both
+the live output and subsequent drive commands, reducing the power ceiling by
+20 percentage points:
+
+```text
+MOTOR,-80
+CURRENT_LIMIT,FOLDBACK,FROM,100,TO,80,OUTPUT,-100,L_IS_RAW,4,R_IS_RAW,56
+```
+
+After 20 consecutive safe samples (about 100 ms), the ceiling recovers by five
+percentage points. Continued overload repeats the 20-point reduction until the
+ceiling reaches 20%. This is PWM power foldback based on sampled raw current,
+not a precision constant-current regulator.
+
+If the reading remains high for ten consecutive samples at the 20% ceiling,
+the bridge is coasted and an emergency fault is latched:
 
 ```text
 MOTOR,0
-CURRENT_LIMIT,TRIPPED,OUTPUT,-70,L_IS_RAW,4,R_IS_RAW,56
+CURRENT_LIMIT,TRIPPED,OUTPUT,-20,L_IS_RAW,4,R_IS_RAW,56
 ```
 
-The fault remains latched and all subsequent `D,...` commands are ignored.
-Xbox B sends `STOP`, which keeps the bridge coasted and clears the latch; a
-controller reset also clears it. USB then reports:
+All subsequent `D,...` commands are then ignored. Xbox B sends `STOP`, which
+keeps the bridge coasted and resets either foldback or the emergency latch; a
+controller reset also resets protection. USB reports:
 
 ```text
 CURRENT_LIMIT,CLEARED
 ```
 
-These are deliberately conservative first thresholds. Tires finding more grip
-than during calibration may cause a legitimate launch to exceed the measured
-wheelspin peaks and trip the cutoff. Raise a channel threshold only after
-collecting repeatable loaded-driving data, and retain a margin below a measured
-locked-rotor current. A software cutoff does not replace a fuse or independent
-hardware protection.
+Tires finding more grip than during calibration may cause a legitimate AWD
+launch to exceed the measured wheelspin peaks and invoke foldback. Adjust a
+channel threshold only after collecting repeatable loaded-driving data, and
+retain a margin below a measured locked-rotor current. Software foldback and
+the emergency cutoff do not replace a fuse or independent hardware protection.
 
 ### Power safety
 
 - A 2S pack is about 7.4 V nominal and 8.4 V fully charged.
 - The present build has no hardware current protection: no fuse, hardware
   current-protection circuit, or automatic hardware cutoff is installed. The
-  measured-current cutoff is firmware-only and depends on the Arduino, sensor
-  wiring, calibration, and program continuing to operate correctly.
-- The throttle ramp and watchdog complement the current cutoff but do not
-  replace independent current protection.
+  measured-current foldback and emergency cutoff are firmware-only and depend
+  on the Arduino, sensor wiring, calibration, and program continuing to operate
+  correctly.
+- The throttle ramp and watchdog complement current foldback but do not replace
+  independent current protection.
 - This unprotected arrangement is risky: the motors have already needed
   repair. Adding properly selected hardware current protection is a target for
   the next revision.
@@ -538,7 +585,8 @@ while powered down.
 - `CurrentMonitor`: raw `L_IS`/`R_IS` ADC peak diagnostics over USB; no control
   authority
 - `CurrentProtection`: consecutive-sample filtering, channel-calibrated raw
-  thresholds, immediate coast, and a STOP-reset latched fault
+  thresholds, adaptive PWM power foldback/recovery, and a persistent-overload
+  emergency coast with a STOP-reset latch
 - `Watchdog`: independent command timeout detection
 
 Independent hardware current protection, precision current calibration,

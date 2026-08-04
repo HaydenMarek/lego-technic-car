@@ -177,10 +177,15 @@ void currentProtectionConfigurationMatchesWheelspinCalibration() {
   assert(Config::CurrentLimitLeftRaw == 112);
   assert(Config::CurrentLimitRightRaw == 55);
   assert(Config::CurrentLimitTripSamples == 3);
+  assert(Config::CurrentLimitFoldbackStep == 20);
+  assert(Config::CurrentLimitMinimumPower == 20);
+  assert(Config::CurrentLimitRecoveryStep == 5);
+  assert(Config::CurrentLimitRecoverySamples == 20);
+  assert(Config::CurrentLimitEmergencyTripSamples == 10);
   assert(Config::CurrentSenseSampleIntervalMs == 5);
 }
 
-void currentProtectionTripsAtThresholdAfterPersistenceAndCoasts() {
+void currentProtectionFoldsBackAfterPersistenceAndRecoversSlowly() {
   if constexpr (!Config::EnableCurrentProtection) {
     return;
   }
@@ -206,44 +211,58 @@ void currentProtectionTripsAtThresholdAfterPersistenceAndCoasts() {
   };
 
   for (uint8_t i = 1; i < Config::CurrentLimitTripSamples; ++i) {
-    assert(!protection.evaluate(atLeft));
+    assert(protection.evaluate(atLeft) == CurrentProtectionEvent::None);
     assert(protection.consecutiveOverLimitSamples() == i);
   }
-  assert(!protection.evaluate(belowLeft));
+  assert(protection.evaluate(belowLeft) == CurrentProtectionEvent::None);
   assert(protection.consecutiveOverLimitSamples() == 0);
   assert(motorDriver.applied() == 100);
 
   for (uint8_t i = 1; i < Config::CurrentLimitTripSamples; ++i) {
-    assert(!protection.evaluate(atLeft));
+    assert(protection.evaluate(atLeft) == CurrentProtectionEvent::None);
   }
-  assert(protection.evaluate(atLeft));
-  assert(protection.faultLatched());
-  assert(!protection.allowsDrive());
-  assert(motorDriver.target() == 0);
-  assert(motorDriver.applied() == 0);
-  assert(protection.tripOutput() == 100);
-  assert(protection.tripSample().leftRaw ==
-         Config::CurrentLimitLeftRaw);
+  assert(protection.evaluate(atLeft) ==
+         CurrentProtectionEvent::Foldback);
+  assert(!protection.faultLatched());
+  assert(protection.allowsDrive());
+  assert(protection.foldbackFrom() == 100);
+  assert(protection.foldbackTo() == 80);
+  assert(protection.powerLimit() == 80);
+  assert(motorDriver.target() == 80);
+  assert(motorDriver.applied() == 80);
 
-  protection.printTrip(diagnostics);
-  const std::string expectedTrip =
-      "CURRENT_LIMIT,TRIPPED,OUTPUT,100,L_IS_RAW," +
+  // Repeated full-throttle commands remain clamped by the live power limit.
+  motorDriver.setTarget(100);
+  assert(motorDriver.target() == 80);
+
+  protection.printFoldback(diagnostics);
+  const std::string expectedFoldback =
+      "CURRENT_LIMIT,FOLDBACK,FROM,100,TO,80,OUTPUT,100,L_IS_RAW," +
       std::to_string(Config::CurrentLimitLeftRaw) +
       ",R_IS_RAW," +
       std::to_string(Config::CurrentLimitRightRaw - 1U) + "\n";
-  assert(diagnostics.output().find(expectedTrip) != std::string::npos);
+  assert(diagnostics.output().find(expectedFoldback) != std::string::npos);
 
-  // A fault remains latched through subsequent safe samples until explicitly
-  // cleared by the STOP path.
-  assert(!protection.evaluate({0, 0}));
-  assert(protection.faultLatched());
+  // Twenty safe samples restore only five percentage points, preventing an
+  // immediate jump back to the current that caused foldback.
+  for (uint8_t i = 1; i < Config::CurrentLimitRecoverySamples; ++i) {
+    assert(protection.evaluate(belowLeft) ==
+           CurrentProtectionEvent::None);
+    assert(protection.powerLimit() == 80);
+  }
+  assert(protection.evaluate(belowLeft) ==
+         CurrentProtectionEvent::None);
+  assert(protection.powerLimit() == 85);
+
+  // STOP clears either a foldback restriction or a latched emergency fault.
   assert(protection.clearFault());
   assert(!protection.faultLatched());
   assert(protection.allowsDrive());
+  assert(protection.powerLimit() == 100);
   assert(!protection.clearFault());
 }
 
-void currentProtectionTripsOnEitherSenseChannelWhileDriving() {
+void currentProtectionTripsPersistentOverloadAtMinimumPower() {
   if constexpr (!Config::EnableCurrentProtection) {
     return;
   }
@@ -261,14 +280,80 @@ void currentProtectionTripsOnEitherSenseChannelWhileDriving() {
       Config::CurrentLimitRightRaw,
   };
 
-  for (uint8_t i = 1; i < Config::CurrentLimitTripSamples; ++i) {
-    assert(!protection.evaluate(atRight));
+  uint8_t expectedLimit = 100;
+  while (expectedLimit > Config::CurrentLimitMinimumPower) {
+    for (uint8_t i = 1; i < Config::CurrentLimitTripSamples; ++i) {
+      assert(protection.evaluate(atRight) ==
+             CurrentProtectionEvent::None);
+    }
+    assert(protection.evaluate(atRight) ==
+           CurrentProtectionEvent::Foldback);
+    expectedLimit =
+        expectedLimit > Config::CurrentLimitFoldbackStep
+            ? static_cast<uint8_t>(
+                  expectedLimit - Config::CurrentLimitFoldbackStep)
+            : Config::CurrentLimitMinimumPower;
+    if (expectedLimit < Config::CurrentLimitMinimumPower) {
+      expectedLimit = Config::CurrentLimitMinimumPower;
+    }
+    assert(protection.powerLimit() == expectedLimit);
   }
-  assert(protection.evaluate(atRight));
-  assert(protection.tripOutput() == 100);
+
+  assert(protection.powerLimit() == Config::CurrentLimitMinimumPower);
+  assert(motorDriver.applied() == Config::CurrentLimitMinimumPower);
+
+  for (uint8_t i = 1;
+       i < Config::CurrentLimitEmergencyTripSamples;
+       ++i) {
+    assert(protection.evaluate(atRight) ==
+           CurrentProtectionEvent::None);
+    assert(!protection.faultLatched());
+  }
+  assert(protection.evaluate(atRight) ==
+         CurrentProtectionEvent::Trip);
+  assert(protection.faultLatched());
+  assert(!protection.allowsDrive());
+  assert(protection.tripOutput() == Config::CurrentLimitMinimumPower);
   assert(protection.tripSample().rightRaw ==
          Config::CurrentLimitRightRaw);
+  assert(motorDriver.target() == 0);
   assert(motorDriver.applied() == 0);
+
+  protection.printTrip(diagnostics);
+  const std::string expectedTrip =
+      "CURRENT_LIMIT,TRIPPED,OUTPUT,20,L_IS_RAW," +
+      std::to_string(Config::CurrentLimitLeftRaw - 1U) +
+      ",R_IS_RAW," +
+      std::to_string(Config::CurrentLimitRightRaw) + "\n";
+  assert(diagnostics.output().find(expectedTrip) != std::string::npos);
+
+  // Safe readings cannot auto-clear a latched hardware-fault fallback.
+  assert(protection.evaluate({0, 0}) == CurrentProtectionEvent::None);
+  assert(protection.faultLatched());
+  assert(protection.clearFault());
+  assert(protection.powerLimit() == 100);
+  assert(protection.allowsDrive());
+}
+
+void motorPowerLimitClampsLiveOutputInBothDirections() {
+  FakeStream diagnostics;
+  MotorDriver motorDriver(diagnostics);
+  motorDriver.begin(0);
+  motorDriver.setTarget(100);
+  motorDriver.update(200);
+  assert(motorDriver.applied() == 100);
+
+  motorDriver.setPowerLimit(60);
+  assert(motorDriver.powerLimit() == 60);
+  assert(motorDriver.target() == 60);
+  assert(motorDriver.applied() == 60);
+
+  motorDriver.setTarget(-100);
+  assert(motorDriver.target() == -60);
+
+  motorDriver.setPowerLimit(100);
+  motorDriver.setTarget(-100);
+  assert(motorDriver.target() == -100);
 }
 
 void motorAccelerationAndDecelerationReachFullScaleIn200Ms() {
@@ -440,8 +525,9 @@ int main() {
   configuredBuildProfileMatchesExpectedUsbMonitorAccess();
   currentMonitorReportsWindowPeaksOnlyForBts7960Build();
   currentProtectionConfigurationMatchesWheelspinCalibration();
-  currentProtectionTripsAtThresholdAfterPersistenceAndCoasts();
-  currentProtectionTripsOnEitherSenseChannelWhileDriving();
+  currentProtectionFoldsBackAfterPersistenceAndRecoversSlowly();
+  currentProtectionTripsPersistentOverloadAtMinimumPower();
+  motorPowerLimitClampsLiveOutputInBothDirections();
   motorAccelerationAndDecelerationReachFullScaleIn200Ms();
   vehicleAppliesThrottleAndStops();
   dynamicBrakingEngagesAtNeutralButNotAfterStop();

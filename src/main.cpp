@@ -65,12 +65,19 @@ class Application final {
 
     motorDriver_.update(now);
     CurrentSenseSample currentSample;
-    if (currentMonitor_.update(now, currentSample) &&
-        currentProtection_.evaluate(currentSample)) {
-      // CurrentProtection has already coasted the bridge. Print only after the
-      // safety action so USB serial cannot delay cutoff.
-      vehicle_.stop();
-      currentProtection_.printTrip(Serial);
+    if (currentMonitor_.update(now, currentSample)) {
+      const CurrentProtectionEvent event =
+          currentProtection_.evaluate(currentSample);
+      if (event == CurrentProtectionEvent::Foldback) {
+        // CurrentProtection has already reduced the live output. Report only
+        // after applying the limit so USB serial cannot delay the response.
+        currentProtection_.printFoldback(Serial);
+      } else if (event == CurrentProtectionEvent::Trip) {
+        // A persistent overload at minimum power has already coasted the
+        // bridge. Keep Vehicle's intent synchronized before diagnostics.
+        vehicle_.stop();
+        currentProtection_.printTrip(Serial);
+      }
     }
 
     digitalWrite(LED_BUILTIN, watchdog_.isTimedOut() ? LOW : HIGH);

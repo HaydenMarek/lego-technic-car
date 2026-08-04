@@ -28,3 +28,13 @@
   Arduino documentation for DTR/RTS-triggered auto-reset when a serial monitor
   opens. Relevant to starting the USB current monitor before the Hub program so
   the Hub receives the post-reset `READY` handshake.
+
+- https://www.analog.com/en/resources/app-notes/an-140.html
+  Analog Devices power-supply application note covering buck-converter input
+  and output capacitor selection, voltage derating, ripple, and load-transient
+  response. Relevant to the regulated 5 V Arduino supply.
+
+- https://www.microchip.com/content/dam/mchp/documents/OTH/ApplicationNotes/ApplicationNotes/Atmel-1619-EMC-Design-Considerations_ApplicationNote_AVR040.pdf
+  Microchip AVR EMC guidance covering local decoupling placement and minimizing
+  high-current loops. Relevant to preventing motor noise and short supply
+  transients from disturbing the Arduino.

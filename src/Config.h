@@ -17,7 +17,7 @@
 // the motor at zero output to oppose back-EMF instead of coasting. STOP,
 // failsafe, and startup always coast for safety regardless of this setting.
 #ifndef TECHNIC_RC_ENABLE_DYNAMIC_BRAKING
-#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 0
+#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 1
 #endif
 
 // Accept protocol commands from the USB serial monitor. This is disabled by
@@ -30,7 +30,7 @@
 // Production current protection. The production PlatformIO profile enables it
 // explicitly after the L_IS/R_IS circuit has been fitted and measured.
 #ifndef TECHNIC_RC_ENABLE_CURRENT_PROTECTION
-#define TECHNIC_RC_ENABLE_CURRENT_PROTECTION 0
+#define TECHNIC_RC_ENABLE_CURRENT_PROTECTION 1
 #endif
 
 #ifndef TECHNIC_RC_CURRENT_LIMIT_LEFT_RAW
@@ -43,6 +43,26 @@
 
 #ifndef TECHNIC_RC_CURRENT_LIMIT_TRIP_SAMPLES
 #define TECHNIC_RC_CURRENT_LIMIT_TRIP_SAMPLES 3
+#endif
+
+#ifndef TECHNIC_RC_CURRENT_LIMIT_FOLDBACK_STEP
+#define TECHNIC_RC_CURRENT_LIMIT_FOLDBACK_STEP 20
+#endif
+
+#ifndef TECHNIC_RC_CURRENT_LIMIT_MINIMUM_POWER
+#define TECHNIC_RC_CURRENT_LIMIT_MINIMUM_POWER 20
+#endif
+
+#ifndef TECHNIC_RC_CURRENT_LIMIT_RECOVERY_STEP
+#define TECHNIC_RC_CURRENT_LIMIT_RECOVERY_STEP 5
+#endif
+
+#ifndef TECHNIC_RC_CURRENT_LIMIT_RECOVERY_SAMPLES
+#define TECHNIC_RC_CURRENT_LIMIT_RECOVERY_SAMPLES 20
+#endif
+
+#ifndef TECHNIC_RC_CURRENT_LIMIT_EMERGENCY_TRIP_SAMPLES
+#define TECHNIC_RC_CURRENT_LIMIT_EMERGENCY_TRIP_SAMPLES 10
 #endif
 
 // Throttle curve exponent. Raw -100..100 commands are shaped before reaching
@@ -99,19 +119,31 @@ constexpr uint32_t CurrentSenseReportIntervalMs = 100;
 
 // Measured with one external 300 ohm resistor from each IS pin to ground, in
 // parallel with the module's measured 10 kohm resistor (about 291 ohm
-// effective). Wheelspin testing peaked at L_IS=101 and R_IS=50. These initial
-// limits are 10% above those observed maxima (rounded upward for L_IS).
+// effective). Wheelspin testing peaked at L_IS=101 and R_IS=50. These limits
+// are 10% above those observed maxima (rounded upward for L_IS).
 //
 // Positive bridge output was observed primarily on L_IS and negative output on
 // R_IS, but protection checks both channels while driving because IS also acts
-// as a fault output. Require several consecutive samples so an isolated
-// PWM/noise peak cannot latch the cutoff.
+// as a fault output. Repeated over-limit samples first fold the allowed motor
+// output back. A persistent overload at the minimum output still latches an
+// emergency cutoff because the IS signals cannot distinguish load current from
+// a BTS7960 hardware fault.
 constexpr uint16_t CurrentLimitLeftRaw =
     TECHNIC_RC_CURRENT_LIMIT_LEFT_RAW;
 constexpr uint16_t CurrentLimitRightRaw =
     TECHNIC_RC_CURRENT_LIMIT_RIGHT_RAW;
 constexpr uint8_t CurrentLimitTripSamples =
     TECHNIC_RC_CURRENT_LIMIT_TRIP_SAMPLES;
+constexpr uint8_t CurrentLimitFoldbackStep =
+    TECHNIC_RC_CURRENT_LIMIT_FOLDBACK_STEP;
+constexpr uint8_t CurrentLimitMinimumPower =
+    TECHNIC_RC_CURRENT_LIMIT_MINIMUM_POWER;
+constexpr uint8_t CurrentLimitRecoveryStep =
+    TECHNIC_RC_CURRENT_LIMIT_RECOVERY_STEP;
+constexpr uint8_t CurrentLimitRecoverySamples =
+    TECHNIC_RC_CURRENT_LIMIT_RECOVERY_SAMPLES;
+constexpr uint8_t CurrentLimitEmergencyTripSamples =
+    TECHNIC_RC_CURRENT_LIMIT_EMERGENCY_TRIP_SAMPLES;
 
 static_assert(CurrentLimitLeftRaw <= 1023,
               "L_IS current limit must fit the UNO ADC");
@@ -123,6 +155,24 @@ static_assert(CurrentLimitTripSamples > 0,
               "Current protection needs at least one over-limit sample");
 static_assert(TECHNIC_RC_CURRENT_LIMIT_TRIP_SAMPLES <= UINT8_MAX,
               "Current protection sample count must fit uint8_t");
+static_assert(CurrentLimitFoldbackStep > 0 &&
+                  CurrentLimitFoldbackStep <= 100,
+              "Current foldback step must be 1..100");
+static_assert(CurrentLimitMinimumPower > 0 &&
+                  CurrentLimitMinimumPower < 100,
+              "Current foldback minimum power must be 1..99");
+static_assert(CurrentLimitRecoveryStep > 0 &&
+                  CurrentLimitRecoveryStep <= 100,
+              "Current foldback recovery step must be 1..100");
+static_assert(CurrentLimitRecoverySamples > 0,
+              "Current foldback recovery needs safe samples");
+static_assert(CurrentLimitEmergencyTripSamples >
+                  CurrentLimitTripSamples,
+              "Emergency cutoff must be slower than initial foldback");
+static_assert(TECHNIC_RC_CURRENT_LIMIT_RECOVERY_SAMPLES <= UINT8_MAX,
+              "Current recovery sample count must fit uint8_t");
+static_assert(TECHNIC_RC_CURRENT_LIMIT_EMERGENCY_TRIP_SAMPLES <= UINT8_MAX,
+              "Emergency cutoff sample count must fit uint8_t");
 
 // When true the Arduino replies ACK,D,<throttle> to every drive command.
 // Disabled by default: the reply blocks SoftwareSerial TX (and therefore RX)
