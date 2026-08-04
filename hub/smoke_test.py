@@ -34,28 +34,29 @@ STEERING_DIRECTION = 1
 STEERING_CURVE_EXPONENT = 2
 
 # ---------------------------------------------------------------------------
-# Gyro steering assist: heading-hold + yaw-rate damping (mirrors hub/main.py).
+# Gyro steering assist: RC drift stabilization (mirrors hub/main.py).
 # ---------------------------------------------------------------------------
 # Runs entirely on the Hub using the built-in IMU. The smoke-test Arduino
 # backend only prints simulated motor output, but the steering motor is real,
 # so this lets the assist be tuned on the bench without driving the buggy
-# motors. See hub/main.py for the full rationale; keep the HeadingHold class in
+# motors. See hub/main.py for the full rationale; keep the DriftAssist class in
 # both programs identical.
 
 ENABLE_GYRO_ASSIST = True
+ASSIST_ALWAYS_ACTIVE = False
 
-ASSIST_KP = 0.4
-ASSIST_KD = 0.15
-ASSIST_DEADBAND_ENTER = 3
-ASSIST_DEADBAND_EXIT = 6
-ASSIST_MAX = 15
+ASSIST_GAIN = 0.10
+ASSIST_YAW_RATE_PER_STEER = 3.0
+ASSIST_YAW_RATE_DEADBAND = 8
+ASSIST_FILTER_ALPHA = 0.25
+ASSIST_MAX = 12
 ASSIST_THROTTLE_MIN = 5
 YAW_SIGN = 1
 ASSIST_DT = CONTROL_PERIOD_MS / 1000.0
 
 
-class HeadingHold:
-    """Heading-hold + yaw-rate damping state for the gyro steering assist.
+class DriftAssist:
+    """Yaw-rate counter-steering state for the gyro drift assist.
 
     Pure control logic with no Pybricks dependencies so it can be unit tested on
     the host. test/test_assist.py mirrors this class; keep them in sync when the
@@ -63,58 +64,66 @@ class HeadingHold:
     test/native/test_main.cpp for the throttle response curve).
     """
 
-    def __init__(self, kp, kd, deadband_enter, deadband_exit, assist_max,
-                 throttle_min, yaw_sign, dt):
-        self.kp = kp
-        self.kd = kd
-        self.deadband_enter = deadband_enter
-        self.deadband_exit = deadband_exit
+    def __init__(self, gain, yaw_rate_per_steer, yaw_rate_deadband,
+                 filter_alpha, assist_max, always_active, throttle_min,
+                 yaw_sign, dt):
+        self.gain = gain
+        self.yaw_rate_per_steer = yaw_rate_per_steer
+        self.yaw_rate_deadband = yaw_rate_deadband
+        self.filter_alpha = filter_alpha
         self.assist_max = assist_max
+        self.always_active = always_active
         self.throttle_min = throttle_min
         self.yaw_sign = yaw_sign
         self.dt = dt
-        self.setpoint = None
         self.prev_heading = None
-        self.holding = False
+        self.filtered_yaw_rate = 0.0
 
-    def step(self, driver_target, heading, throttle):
+    def step(self, driver_target, heading, forward_throttle):
+        base = driver_target if driver_target is not None else 0
+
         if self.prev_heading is None:
-            yaw_rate = 0.0
-        else:
-            yaw_rate = (heading - self.prev_heading) / self.dt
+            self.prev_heading = heading
+            return base, 0.0
 
-        moving = abs(throttle) >= self.throttle_min
-        mag = abs(driver_target) if driver_target is not None else 0
-        was_holding = self.holding
-
-        if not moving or self.setpoint is None:
-            new_holding = False
-            new_setpoint = heading
-        elif mag > self.deadband_exit:
-            new_holding = False
-            new_setpoint = heading
-        elif mag < self.deadband_enter:
-            new_holding = True
-            new_setpoint = heading if not was_holding else self.setpoint
-        else:
-            new_holding = was_holding
-            new_setpoint = self.setpoint
-
-        self.holding = new_holding
-        self.setpoint = new_setpoint
+        raw_yaw_rate = (heading - self.prev_heading) / self.dt
         self.prev_heading = heading
 
-        if new_holding:
-            error = ((heading - new_setpoint + 180.0) % 360.0) - 180.0
-            correction = self.yaw_sign * (self.kp * error + self.kd * yaw_rate)
-            if correction > self.assist_max:
-                correction = self.assist_max
-            elif correction < -self.assist_max:
-                correction = -self.assist_max
-        else:
-            correction = 0.0
+        if not self.always_active and forward_throttle < self.throttle_min:
+            self.filtered_yaw_rate = 0.0
+            return base, 0.0
 
-        base = driver_target if driver_target is not None else 0
+        self.filtered_yaw_rate += self.filter_alpha * (
+            raw_yaw_rate - self.filtered_yaw_rate
+        )
+        aligned_yaw_rate = self.yaw_sign * self.filtered_yaw_rate
+        allowed_yaw_rate = base * self.yaw_rate_per_steer
+
+        if aligned_yaw_rate * allowed_yaw_rate > 0:
+            excess = aligned_yaw_rate
+            if abs(aligned_yaw_rate) <= abs(allowed_yaw_rate):
+                excess = 0.0
+            elif aligned_yaw_rate > 0:
+                excess -= abs(allowed_yaw_rate)
+            else:
+                excess += abs(allowed_yaw_rate)
+        else:
+            excess = aligned_yaw_rate
+
+        if abs(excess) <= self.yaw_rate_deadband:
+            correction = 0.0
+        else:
+            if excess > 0:
+                excess -= self.yaw_rate_deadband
+            else:
+                excess += self.yaw_rate_deadband
+            correction = self.gain * excess
+
+        if correction > self.assist_max:
+            correction = self.assist_max
+        elif correction < -self.assist_max:
+            correction = -self.assist_max
+
         return base - correction, correction
 
 
@@ -223,10 +232,11 @@ async def main():
                 if hub.imu.ready():
                     break
                 await wait(CONTROL_PERIOD_MS)
-            assist = HeadingHold(
-                ASSIST_KP, ASSIST_KD,
-                ASSIST_DEADBAND_ENTER, ASSIST_DEADBAND_EXIT,
-                ASSIST_MAX, ASSIST_THROTTLE_MIN, YAW_SIGN, ASSIST_DT,
+            assist = DriftAssist(
+                ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
+                ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
+                ASSIST_MAX, ASSIST_ALWAYS_ACTIVE, ASSIST_THROTTLE_MIN,
+                YAW_SIGN, ASSIST_DT,
             )
 
         while True:
@@ -243,9 +253,7 @@ async def main():
                 positive_limit,
             )
 
-            # Fold the gyro heading-hold/yaw-damping correction into the
-            # steering target. Engages only with throttle applied and near
-            # center, so it never fights an intentional turn.
+            # Fold rate-only drift counter-steering into the steering target.
             if assist is not None:
                 target, _ = assist.step(target, hub.imu.heading(), throttle)
                 if target < negative_limit:

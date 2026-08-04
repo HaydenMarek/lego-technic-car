@@ -17,7 +17,7 @@
 // the motor at zero output to oppose back-EMF instead of coasting. STOP,
 // failsafe, and startup always coast for safety regardless of this setting.
 #ifndef TECHNIC_RC_ENABLE_DYNAMIC_BRAKING
-#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 1
+#define TECHNIC_RC_ENABLE_DYNAMIC_BRAKING 0
 #endif
 
 // Accept protocol commands from the USB serial monitor. This is disabled by
@@ -25,6 +25,24 @@
 // environment enables it explicitly for interactive testing.
 #ifndef TECHNIC_RC_ENABLE_MONITOR_COMMANDS
 #define TECHNIC_RC_ENABLE_MONITOR_COMMANDS 0
+#endif
+
+// Production current protection. The production PlatformIO profile enables it
+// explicitly after the L_IS/R_IS circuit has been fitted and measured.
+#ifndef TECHNIC_RC_ENABLE_CURRENT_PROTECTION
+#define TECHNIC_RC_ENABLE_CURRENT_PROTECTION 0
+#endif
+
+#ifndef TECHNIC_RC_CURRENT_LIMIT_LEFT_RAW
+#define TECHNIC_RC_CURRENT_LIMIT_LEFT_RAW 112
+#endif
+
+#ifndef TECHNIC_RC_CURRENT_LIMIT_RIGHT_RAW
+#define TECHNIC_RC_CURRENT_LIMIT_RIGHT_RAW 55
+#endif
+
+#ifndef TECHNIC_RC_CURRENT_LIMIT_TRIP_SAMPLES
+#define TECHNIC_RC_CURRENT_LIMIT_TRIP_SAMPLES 3
 #endif
 
 // Throttle curve exponent. Raw -100..100 commands are shaped before reaching
@@ -48,6 +66,11 @@ struct Bts7960Pins {
   uint8_t leftEnable;
 };
 
+struct Bts7960CurrentSensePins {
+  uint8_t leftIs;
+  uint8_t rightIs;
+};
+
 constexpr unsigned long UsbBaud = 115200;
 constexpr unsigned long HubBaud = 9600;
 constexpr uint32_t FailsafeTimeoutMs = 500;
@@ -60,8 +83,46 @@ constexpr uint8_t HubTxPin = 11;
 // (they are mounted side-by-side and mirror each other), so one bridge is
 // enough for both drive motors.
 constexpr Bts7960Pins BridgePins{5, 6, 2, 4};
+constexpr Bts7960CurrentSensePins BridgeCurrentSensePins{A0, A1};
 
 constexpr bool EnableBts7960Outputs = TECHNIC_RC_ENABLE_BTS7960 != 0;
+constexpr bool EnableCurrentProtection =
+    EnableBts7960Outputs &&
+    TECHNIC_RC_ENABLE_CURRENT_PROTECTION != 0;
+
+// L_IS and R_IS are sampled frequently enough to observe the PWM-active sense
+// output. The peak raw ADC count from each reporting window is emitted over USB
+// serial. Current protection evaluates the individual samples, not the slower
+// diagnostic reporting windows.
+constexpr uint32_t CurrentSenseSampleIntervalMs = 5;
+constexpr uint32_t CurrentSenseReportIntervalMs = 100;
+
+// Measured with one external 300 ohm resistor from each IS pin to ground, in
+// parallel with the module's measured 10 kohm resistor (about 291 ohm
+// effective). Wheelspin testing peaked at L_IS=101 and R_IS=50. These initial
+// limits are 10% above those observed maxima (rounded upward for L_IS).
+//
+// Positive bridge output was observed primarily on L_IS and negative output on
+// R_IS, but protection checks both channels while driving because IS also acts
+// as a fault output. Require several consecutive samples so an isolated
+// PWM/noise peak cannot latch the cutoff.
+constexpr uint16_t CurrentLimitLeftRaw =
+    TECHNIC_RC_CURRENT_LIMIT_LEFT_RAW;
+constexpr uint16_t CurrentLimitRightRaw =
+    TECHNIC_RC_CURRENT_LIMIT_RIGHT_RAW;
+constexpr uint8_t CurrentLimitTripSamples =
+    TECHNIC_RC_CURRENT_LIMIT_TRIP_SAMPLES;
+
+static_assert(CurrentLimitLeftRaw <= 1023,
+              "L_IS current limit must fit the UNO ADC");
+static_assert(CurrentLimitRightRaw <= 1023,
+              "R_IS current limit must fit the UNO ADC");
+static_assert(CurrentLimitLeftRaw > 0 && CurrentLimitRightRaw > 0,
+              "Current limits must be nonzero");
+static_assert(CurrentLimitTripSamples > 0,
+              "Current protection needs at least one over-limit sample");
+static_assert(TECHNIC_RC_CURRENT_LIMIT_TRIP_SAMPLES <= UINT8_MAX,
+              "Current protection sample count must fit uint8_t");
 
 // When true the Arduino replies ACK,D,<throttle> to every drive command.
 // Disabled by default: the reply blocks SoftwareSerial TX (and therefore RX)

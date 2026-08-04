@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include "CurrentMonitor.h"
+#include "CurrentProtection.h"
 #include "MotorDriver.h"
 #include "Protocol.h"
 #include "Vehicle.h"
@@ -10,6 +12,10 @@
 
 #ifndef TECHNIC_RC_EXPECT_MONITOR_COMMANDS
 #error "Native tests require TECHNIC_RC_EXPECT_MONITOR_COMMANDS"
+#endif
+
+#ifndef TECHNIC_RC_EXPECT_CURRENT_PROTECTION
+#error "Native tests require TECHNIC_RC_EXPECT_CURRENT_PROTECTION"
 #endif
 
 namespace {
@@ -122,6 +128,147 @@ void protocolWritesStableReplies() {
 void configuredBuildProfileMatchesExpectedUsbMonitorAccess() {
   const bool expected = TECHNIC_RC_EXPECT_MONITOR_COMMANDS != 0;
   assert(Config::EnableMonitorCommands == expected);
+
+  const bool expectedProtection =
+      TECHNIC_RC_EXPECT_CURRENT_PROTECTION != 0;
+  assert(Config::EnableCurrentProtection == expectedProtection);
+}
+
+void currentMonitorReportsWindowPeaksOnlyForBts7960Build() {
+  FakeStream diagnostics;
+  CurrentMonitor monitor(diagnostics);
+  monitor.begin(UINT32_MAX - 50U);
+  CurrentSenseSample sample;
+
+  analogValues[A0] = 100;
+  analogValues[A1] = 200;
+  assert(monitor.update(UINT32_MAX - 45U, sample) ==
+         Config::EnableBts7960Outputs);
+
+  analogValues[A0] = 300;
+  analogValues[A1] = 150;
+  assert(monitor.update(UINT32_MAX - 40U, sample) ==
+         Config::EnableBts7960Outputs);
+
+  if constexpr (Config::EnableBts7960Outputs) {
+    assert(sample.leftRaw == 300);
+    assert(sample.rightRaw == 150);
+    assert(monitor.leftPeakRaw() == 300);
+    assert(monitor.rightPeakRaw() == 200);
+
+    // The reporting interval crosses millis() rollover safely.
+    assert(monitor.update(50U, sample));
+    assert(diagnostics.output() ==
+           "CURRENT,L_IS_RAW,300,R_IS_RAW,200\n");
+    assert(monitor.leftPeakRaw() == 0);
+    assert(monitor.rightPeakRaw() == 0);
+  } else {
+    assert(diagnostics.output().empty());
+    assert(monitor.leftPeakRaw() == 0);
+    assert(monitor.rightPeakRaw() == 0);
+  }
+}
+
+void currentProtectionConfigurationMatchesWheelspinCalibration() {
+  if constexpr (!Config::EnableCurrentProtection) {
+    return;
+  }
+
+  assert(Config::CurrentLimitLeftRaw == 112);
+  assert(Config::CurrentLimitRightRaw == 55);
+  assert(Config::CurrentLimitTripSamples == 3);
+  assert(Config::CurrentSenseSampleIntervalMs == 5);
+}
+
+void currentProtectionTripsAtThresholdAfterPersistenceAndCoasts() {
+  if constexpr (!Config::EnableCurrentProtection) {
+    return;
+  }
+
+  FakeStream diagnostics;
+  MotorDriver motorDriver(diagnostics);
+  motorDriver.begin(0);
+  motorDriver.setTarget(100);
+  motorDriver.update(200);
+  assert(motorDriver.applied() == 100);
+
+  CurrentProtection protection(motorDriver);
+
+  // A sample immediately below both inclusive channel limits must reset
+  // persistence.
+  const CurrentSenseSample belowLeft{
+      static_cast<uint16_t>(Config::CurrentLimitLeftRaw - 1U),
+      static_cast<uint16_t>(Config::CurrentLimitRightRaw - 1U),
+  };
+  const CurrentSenseSample atLeft{
+      Config::CurrentLimitLeftRaw,
+      static_cast<uint16_t>(Config::CurrentLimitRightRaw - 1U),
+  };
+
+  for (uint8_t i = 1; i < Config::CurrentLimitTripSamples; ++i) {
+    assert(!protection.evaluate(atLeft));
+    assert(protection.consecutiveOverLimitSamples() == i);
+  }
+  assert(!protection.evaluate(belowLeft));
+  assert(protection.consecutiveOverLimitSamples() == 0);
+  assert(motorDriver.applied() == 100);
+
+  for (uint8_t i = 1; i < Config::CurrentLimitTripSamples; ++i) {
+    assert(!protection.evaluate(atLeft));
+  }
+  assert(protection.evaluate(atLeft));
+  assert(protection.faultLatched());
+  assert(!protection.allowsDrive());
+  assert(motorDriver.target() == 0);
+  assert(motorDriver.applied() == 0);
+  assert(protection.tripOutput() == 100);
+  assert(protection.tripSample().leftRaw ==
+         Config::CurrentLimitLeftRaw);
+
+  protection.printTrip(diagnostics);
+  const std::string expectedTrip =
+      "CURRENT_LIMIT,TRIPPED,OUTPUT,100,L_IS_RAW," +
+      std::to_string(Config::CurrentLimitLeftRaw) +
+      ",R_IS_RAW," +
+      std::to_string(Config::CurrentLimitRightRaw - 1U) + "\n";
+  assert(diagnostics.output().find(expectedTrip) != std::string::npos);
+
+  // A fault remains latched through subsequent safe samples until explicitly
+  // cleared by the STOP path.
+  assert(!protection.evaluate({0, 0}));
+  assert(protection.faultLatched());
+  assert(protection.clearFault());
+  assert(!protection.faultLatched());
+  assert(protection.allowsDrive());
+  assert(!protection.clearFault());
+}
+
+void currentProtectionTripsOnEitherSenseChannelWhileDriving() {
+  if constexpr (!Config::EnableCurrentProtection) {
+    return;
+  }
+
+  FakeStream diagnostics;
+  MotorDriver motorDriver(diagnostics);
+  motorDriver.begin(0);
+  motorDriver.setTarget(100);
+  motorDriver.update(200);
+  assert(motorDriver.applied() == 100);
+
+  CurrentProtection protection(motorDriver);
+  const CurrentSenseSample atRight{
+      static_cast<uint16_t>(Config::CurrentLimitLeftRaw - 1U),
+      Config::CurrentLimitRightRaw,
+  };
+
+  for (uint8_t i = 1; i < Config::CurrentLimitTripSamples; ++i) {
+    assert(!protection.evaluate(atRight));
+  }
+  assert(protection.evaluate(atRight));
+  assert(protection.tripOutput() == 100);
+  assert(protection.tripSample().rightRaw ==
+         Config::CurrentLimitRightRaw);
+  assert(motorDriver.applied() == 0);
 }
 
 void motorAccelerationAndDecelerationReachFullScaleIn200Ms() {
@@ -291,6 +438,10 @@ int main() {
   protocolRecoversAfterOverflow();
   protocolWritesStableReplies();
   configuredBuildProfileMatchesExpectedUsbMonitorAccess();
+  currentMonitorReportsWindowPeaksOnlyForBts7960Build();
+  currentProtectionConfigurationMatchesWheelspinCalibration();
+  currentProtectionTripsAtThresholdAfterPersistenceAndCoasts();
+  currentProtectionTripsOnEitherSenseChannelWhileDriving();
   motorAccelerationAndDecelerationReachFullScaleIn200Ms();
   vehicleAppliesThrottleAndStops();
   dynamicBrakingEngagesAtNeutralButNotAfterStop();

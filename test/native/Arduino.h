@@ -8,11 +8,19 @@
 
 constexpr uint8_t LOW = 0;
 constexpr uint8_t HIGH = 1;
+constexpr uint8_t INPUT = 0;
 constexpr uint8_t OUTPUT = 1;
+constexpr uint8_t A0 = 14;
+constexpr uint8_t A1 = 15;
+
+inline int analogValues[16]{};
 
 inline void digitalWrite(uint8_t, uint8_t) {}
 inline void pinMode(uint8_t, uint8_t) {}
 inline void analogWrite(uint8_t, int) {}
+inline int analogRead(uint8_t pin) {
+  return pin < 16 ? analogValues[pin] : 0;
+}
 
 template <typename T>
 constexpr T max(T left, T right) {

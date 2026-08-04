@@ -15,6 +15,10 @@ UART_BAUD = 9600
 CONTROL_PERIOD_MS = 20
 ARM_TRIGGER_MAX = 2
 
+# Reverse both drive motors together to match their physical mounting.
+# Set to 1 if the drivetrain is later rewired in the opposite orientation.
+DRIVE_DIRECTION = -1
+
 # Startup steering calibration settings.
 CALIBRATION_SPEED = 150
 CALIBRATION_DUTY_LIMIT = 25
@@ -38,50 +42,44 @@ STEERING_DIRECTION = 1
 STEERING_CURVE_EXPONENT = 2
 
 # ---------------------------------------------------------------------------
-# Gyro steering assist: heading-hold + yaw-rate damping
+# Gyro steering assist: RC drift stabilization
 # ---------------------------------------------------------------------------
-# The Technic Hub's built-in IMU is used to add a small corrective offset to the
-# steering target so the car resists yawing off a straight line, especially just
-# after releasing a drift. This runs entirely on the Hub: the steering motor and
-# the IMU are both Hub-local, so the Arduino throttle/UART path is untouched and
-# the existing module boundaries are preserved ("steering is owned by the Hub").
+# The Technic Hub's built-in IMU adds a small counter-steering offset when the
+# car rotates faster than the driver's steering asks for. Unlike heading hold,
+# this does not remember or return to an earlier direction: once the unwanted
+# rotation settles, the correction returns to zero at the car's new heading.
 #
 # hub.imu.heading() returns a continuous (unwrapped) heading in degrees that is
 # clockwise positive and resolved about the vertical axis automatically from
-# gravity, so the Hub's physical mounting orientation does not matter as long
-# as one face stays up. The yaw rate is derived from consecutive heading
-# samples so both terms share the same axis and sign; only the mapping from
-# heading direction to steering direction needs on-car calibration (YAW_SIGN).
+# gravity. Consecutive readings provide mounting-independent yaw rate. YAW_SIGN
+# maps that rate onto the steering motor's positive direction.
 #
-# While the driver steers, the held heading tracks the live heading (no
-# correction). When the wheel returns to center and throttle is applied, the
-# setpoint freezes and the controller counters drift with
-#     correction = YAW_SIGN * (Kp * heading_error + Kd * yaw_rate)
-# added to the driver's steering target. Heading error wraps to [-180, 180] to
-# stay correct after full turns. The correction is clamped to a few degrees
-# ("help a little", not an autopilot) and the assist is disabled below a small
-# throttle so the steering never hunts while parked or coasting.
+# Steering input grants a same-direction yaw-rate allowance, so normal turns are
+# left alone. Only yaw beyond that allowance is damped. Opposite-direction yaw
+# is always damped, which complements deliberate counter-steering during a
+# slide. The assist is filtered, deadbanded, and capped. It remains active after
+# calibration even while stopped so counter-steering is visible when the car is
+# rotated by hand. This also keeps it active in reverse, where the physical
+# steering-to-yaw relationship is inverted, so reverse handling must be tested
+# carefully.
 
-ENABLE_GYRO_ASSIST = False
+ENABLE_GYRO_ASSIST = True
+ASSIST_ALWAYS_ACTIVE = True
 
-# Heading-error gain: degrees of steering correction per degree of heading
-# error. Start small; increase until the car holds a straight line.
-ASSIST_KP = 0.4
-# Yaw-rate gain: degrees of steering correction per deg/s of yaw. Damps the
-# post-drift rotation so the car settles quickly.
-ASSIST_KD = 0.15
-# Steering-target deadband in degrees. Within the "enter" band the assist
-# freezes the heading; outside the "exit" band the driver is steering and the
-# assist tracks the heading. The gap gives hysteresis against chattering.
-ASSIST_DEADBAND_ENTER = 3
-ASSIST_DEADBAND_EXIT = 6
+# Degrees of steering correction per deg/s of excess yaw rate.
+ASSIST_GAIN = 1.75
+# Same-direction yaw rate allowed per degree of driver steering target. This
+# lets the car follow intentional turns without the gyro fighting the driver.
+ASSIST_YAW_RATE_PER_STEER = 3.0
+# Ignore small excess rates to prevent steering chatter from gyro noise.
+ASSIST_YAW_RATE_DEADBAND = 0
+# Low-pass coefficient for yaw rate (0..1). Lower is smoother but reacts later.
+ASSIST_FILTER_ALPHA = 1.00
 # Maximum corrective offset in degrees either way.
-ASSIST_MAX = 15
-# Assist is disabled below this |throttle| so the steering does not hunt while
-# parked or coasting; it engages only when the driver applies throttle.
+ASSIST_MAX = 80
+# Fallback gate used only when ASSIST_ALWAYS_ACTIVE is False.
 ASSIST_THROTTLE_MIN = 5
-# Flip to -1 if the gyro correction makes the car turn the wrong way; the
-# correct value makes the assist oppose the unintended yaw.
+# Flip to -1 if the correction reinforces a slide instead of counter-steering.
 YAW_SIGN = 1
 
 # Assumed time between assist frames (seconds). The control loop targets the
@@ -89,8 +87,8 @@ YAW_SIGN = 1
 ASSIST_DT = CONTROL_PERIOD_MS / 1000.0
 
 
-class HeadingHold:
-    """Heading-hold + yaw-rate damping state for the gyro steering assist.
+class DriftAssist:
+    """Yaw-rate counter-steering state for the gyro drift assist.
 
     Pure control logic with no Pybricks dependencies so it can be unit tested on
     the host. test/test_assist.py mirrors this class; keep them in sync when the
@@ -98,82 +96,88 @@ class HeadingHold:
     test/native/test_main.cpp for the throttle response curve).
     """
 
-    def __init__(self, kp, kd, deadband_enter, deadband_exit, assist_max,
-                 throttle_min, yaw_sign, dt):
-        self.kp = kp
-        self.kd = kd
-        self.deadband_enter = deadband_enter
-        self.deadband_exit = deadband_exit
+    def __init__(self, gain, yaw_rate_per_steer, yaw_rate_deadband,
+                 filter_alpha, assist_max, always_active, throttle_min,
+                 yaw_sign, dt):
+        self.gain = gain
+        self.yaw_rate_per_steer = yaw_rate_per_steer
+        self.yaw_rate_deadband = yaw_rate_deadband
+        self.filter_alpha = filter_alpha
         self.assist_max = assist_max
+        self.always_active = always_active
         self.throttle_min = throttle_min
         self.yaw_sign = yaw_sign
         self.dt = dt
-        # Held heading (degrees), None until the first frame.
-        self.setpoint = None
-        # Previous-frame heading for rate derivation, None until the first frame.
         self.prev_heading = None
-        # True while the setpoint is frozen (driver wants a straight line).
-        self.holding = False
+        self.filtered_yaw_rate = 0.0
 
-    def step(self, driver_target, heading, throttle):
+    def step(self, driver_target, heading, forward_throttle):
         """Return the assist-corrected steering target for this frame.
 
         driver_target: joystick-mapped steering target in degrees (centered at
             0, within the calibrated mechanical limits).
         heading: current hub.imu.heading() reading in degrees (continuous).
-        throttle: current throttle intent (-100..100).
+        forward_throttle: unmapped trigger intent (-100..100), positive forward.
 
         Returns (target, correction) where target is the corrected steering
         target (still to be clamped to the mechanical limits by the caller) and
         correction is the gyro offset that was subtracted from driver_target.
         """
+        base = driver_target if driver_target is not None else 0
+
         # Yaw rate from consecutive continuous headings (clockwise positive).
         # heading() is unwrapped, so a plain difference is the true rate even
         # across the +/-180 boundary; no wraparound handling is needed here.
         if self.prev_heading is None:
-            yaw_rate = 0.0
-        else:
-            yaw_rate = (heading - self.prev_heading) / self.dt
+            self.prev_heading = heading
+            return base, 0.0
 
-        moving = abs(throttle) >= self.throttle_min
-        mag = abs(driver_target) if driver_target is not None else 0
-        was_holding = self.holding
-
-        # Engage only with throttle applied (per the chosen activation mode):
-        # parked/coasting just tracks the heading so re-applying throttle never
-        # snaps to a stale setpoint. While steering, also track the heading.
-        if not moving or self.setpoint is None:
-            new_holding = False
-            new_setpoint = heading
-        elif mag > self.deadband_exit:
-            new_holding = False
-            new_setpoint = heading
-        elif mag < self.deadband_enter:
-            new_holding = True
-            # Freeze the setpoint on the first centered frame, then keep it.
-            new_setpoint = heading if not was_holding else self.setpoint
-        else:
-            # Hysteresis gap: keep the previous mode and setpoint.
-            new_holding = was_holding
-            new_setpoint = self.setpoint
-
-        self.holding = new_holding
-        self.setpoint = new_setpoint
+        raw_yaw_rate = (heading - self.prev_heading) / self.dt
         self.prev_heading = heading
 
-        if new_holding:
-            # Smallest signed heading error, wrapped to [-180, 180] so the
-            # controller stays correct after one or more full turns.
-            error = ((heading - new_setpoint + 180.0) % 360.0) - 180.0
-            correction = self.yaw_sign * (self.kp * error + self.kd * yaw_rate)
-            if correction > self.assist_max:
-                correction = self.assist_max
-            elif correction < -self.assist_max:
-                correction = -self.assist_max
-        else:
-            correction = 0.0
+        # An optional forward-throttle gate is retained for configurations that
+        # do not want correction while parked or reversing. Production keeps
+        # always_active enabled so hand rotation produces visible counter-steer.
+        if not self.always_active and forward_throttle < self.throttle_min:
+            self.filtered_yaw_rate = 0.0
+            return base, 0.0
 
-        base = driver_target if driver_target is not None else 0
+        self.filtered_yaw_rate += self.filter_alpha * (
+            raw_yaw_rate - self.filtered_yaw_rate
+        )
+        aligned_yaw_rate = self.yaw_sign * self.filtered_yaw_rate
+
+        # Driver steering opens a permitted yaw envelope in the same direction.
+        # Inside it, correction stays zero; the gyro therefore never adds
+        # steering merely to make the car turn faster.
+        allowed_yaw_rate = base * self.yaw_rate_per_steer
+        if aligned_yaw_rate * allowed_yaw_rate > 0:
+            excess = aligned_yaw_rate
+            if abs(aligned_yaw_rate) <= abs(allowed_yaw_rate):
+                excess = 0.0
+            elif aligned_yaw_rate > 0:
+                excess -= abs(allowed_yaw_rate)
+            else:
+                excess += abs(allowed_yaw_rate)
+        else:
+            excess = aligned_yaw_rate
+
+        # Remove the deadband continuously so there is no correction step at
+        # its edge, then clamp the gyro to limited authority.
+        if abs(excess) <= self.yaw_rate_deadband:
+            correction = 0.0
+        else:
+            if excess > 0:
+                excess -= self.yaw_rate_deadband
+            else:
+                excess += self.yaw_rate_deadband
+            correction = self.gain * excess
+
+        if correction > self.assist_max:
+            correction = self.assist_max
+        elif correction < -self.assist_max:
+            correction = -self.assist_max
+
         return base - correction, correction
 
 
@@ -272,7 +276,7 @@ def steering_target(joystick, negative_limit, positive_limit):
     return positive_limit * directed // 100
 
 
-async def wait_for_arm(negative_limit, positive_limit):
+async def wait_for_arm(negative_limit, positive_limit, assist):
     """Keep drive stopped until A is newly pressed with neutral triggers."""
 
     a_was_pressed = Button.A in controller.buttons.pressed()
@@ -290,6 +294,19 @@ async def wait_for_arm(negative_limit, positive_limit):
             negative_limit,
             positive_limit,
         )
+
+        # Keep the always-active gyro live while drive output is still safely
+        # stopped, allowing a hand-rotation direction check before arming.
+        if assist is not None:
+            drive_intent = int(right_trigger - left_trigger)
+            target, _ = assist.step(
+                target, hub.imu.heading(), drive_intent
+            )
+            if target < negative_limit:
+                target = negative_limit
+            elif target > positive_limit:
+                target = positive_limit
+
         steering_motor.track_target(target)
 
         # Repeated STOP packets make the unarmed state explicit.
@@ -322,24 +339,27 @@ async def main():
         negative_limit, positive_limit = await calibrate_steering()
         calibrated = True
 
-        # A must be released and newly pressed while both triggers are neutral.
-        if not await wait_for_arm(negative_limit, positive_limit):
-            return
-
         # Let the IMU settle (it auto-calibrates at boot) so the heading is
-        # stable before the first assist frame. The heading is relative, so a
-        # late settle only shifts the reference; the wait is bounded.
+        # stable before enabling assist. The heading is relative, so a late
+        # settle only shifts the reference; the wait is bounded.
         assist = None
         if ENABLE_GYRO_ASSIST:
             for _ in range(50):
                 if hub.imu.ready():
                     break
                 await wait(CONTROL_PERIOD_MS)
-            assist = HeadingHold(
-                ASSIST_KP, ASSIST_KD,
-                ASSIST_DEADBAND_ENTER, ASSIST_DEADBAND_EXIT,
-                ASSIST_MAX, ASSIST_THROTTLE_MIN, YAW_SIGN, ASSIST_DT,
+            assist = DriftAssist(
+                ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
+                ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
+                ASSIST_MAX, ASSIST_ALWAYS_ACTIVE, ASSIST_THROTTLE_MIN,
+                YAW_SIGN, ASSIST_DT,
             )
+
+        # A must be released and newly pressed while both triggers are neutral.
+        # The gyro is already active here, but Arduino drive output remains
+        # stopped until arming succeeds.
+        if not await wait_for_arm(negative_limit, positive_limit, assist):
+            return
 
         while True:
             # Press B to stop the vehicle and end the program.
@@ -350,7 +370,9 @@ async def main():
             steering, _ = controller.joystick_left()
 
             # Right trigger drives forward; left trigger drives backward.
-            throttle = int(right_trigger - left_trigger)
+            # DRIVE_DIRECTION maps that intent to the mounted motor direction.
+            drive_intent = int(right_trigger - left_trigger)
+            throttle = drive_intent * DRIVE_DIRECTION
             steering = int(steering)
 
             # Steering is owned entirely by the Technic Hub and constrained to
@@ -361,12 +383,13 @@ async def main():
                 positive_limit,
             )
 
-            # Fold the gyro heading-hold/yaw-damping correction into the
-            # steering target. The assist engages only with throttle applied
-            # and when the wheel is near center, so it never fights an
-            # intentional turn.
+            # Fold rate-only drift counter-steering into the target. Use
+            # unmapped trigger intent so the assist can distinguish physical
+            # forward from reverse even when drive output is inverted.
             if assist is not None:
-                target, _ = assist.step(target, hub.imu.heading(), throttle)
+                target, _ = assist.step(
+                    target, hub.imu.heading(), drive_intent
+                )
                 if target < negative_limit:
                     target = negative_limit
                 elif target > positive_limit:

@@ -14,9 +14,10 @@ no steering motor, PWM, or BTS7960 details.
 > [!WARNING]
 > The current revision has no hardware current protection: no fuse, hardware
 > current-protection circuit, or automatic hardware cutoff is installed.
-> Current sensing is not connected and the firmware does not limit current.
-> This is a known risk, and the motors have already needed repair. Hardware
-> current protection is planned for the next revision.
+> The production firmware now has a measured-current software cutoff, but it
+> cannot protect against an Arduino crash, wiring fault, incorrect calibration,
+> or power-stage failure. This is a known risk, and the motors have already
+> needed repair. Proper hardware current protection is still required.
 
 ## Protocol
 
@@ -26,8 +27,8 @@ Commands are ASCII lines terminated by `\n`:
 | --- | --- | --- |
 | `PING` | `PONG` | Link test; does not refresh drive intent |
 | `MODE` | `MODE,BENCH` or `MODE,BTS7960` | Report active output backend |
-| `STOP` | `ACK,STOP` | Stop the motor target and refresh the watchdog |
-| `D,<throttle>` | none by default (optional `ACK,D,<throttle>`) | Apply throttle and refresh the watchdog |
+| `STOP` | `ACK,STOP` | Stop the motor target, clear a latched software current fault, and refresh the watchdog |
+| `D,<throttle>` | none by default (optional `ACK,D,<throttle>`) | Apply throttle unless current protection is latched, and refresh the watchdog |
 | Invalid input | `ERR` | No state change and no watchdog refresh |
 
 Throttle must be an integer from -100 to 100. The same target drives the single
@@ -38,6 +39,11 @@ If no fresh drive or stop command arrives for more than 500 ms, the watchdog
 stops the vehicle. `PING` cannot keep stale throttle alive. `millis()` rollover
 is handled by unsigned subtraction. Command refresh and timeout evaluation use
 the same loop timestamp to avoid false timeouts at millisecond boundaries.
+
+The production current cutoff immediately coasts the bridge after three
+consecutive above-limit current samples. It then ignores drive commands until
+an explicit `STOP` or controller reset clears the latched fault. `STOP` keeps
+the motor stopped while clearing the latch.
 
 ### Control latency
 
@@ -125,12 +131,15 @@ Defaults:
 
 - UART: Hub port C at 9600 baud
 - Steering motor: Hub port A
+- Production drive direction: reversed on the Hub (`DRIVE_DIRECTION = -1`)
 - Steering travel: measured automatically at startup
 - Steering response: quadratic curve (`STEERING_CURVE_EXPONENT = 2`),
   less sensitive near center, full lock at full stick
 - Xbox A button: arm production drive after calibration
 - Xbox B button: stop and end the program
-- Gyro steering assist: heading-hold + yaw-rate damping on the Hub (enabled)
+- Gyro steering assist: rate-only RC drift stabilization on the Hub (enabled)
+- Production current protection: enabled
+- Production dynamic braking: disabled
 
 At startup, the Hub keeps Arduino drive output stopped, moves the steering to
 the left and right mechanical end stops at limited duty, calculates the
@@ -145,64 +154,82 @@ stall detection; the default is 25%.
 
 ## Gyro steering assist
 
-The Technic Hub's built-in IMU adds a gyro steering stabilizer to the steering
-motor so the car resists yawing off a straight line, especially just after
-releasing a drift. The assist runs entirely on the Hub: the steering motor and
-the IMU are both Hub-local, so the Arduino throttle/UART path is unchanged and
-steering remains owned by the Hub. It is enabled with `ENABLE_GYRO_ASSIST` in
-both Hub programs.
+The Technic Hub's built-in IMU adds RC-style drift stabilization to the
+steering motor. It counter-steers when the car rotates faster than the driver's
+steering input calls for, rather than trying to preserve a compass direction.
+Once the rotation settles, correction returns to zero at the car's new
+heading; it never steers back toward an old heading. The assist runs entirely
+on the Hub, so the Arduino throttle/UART path is unchanged and steering remains
+owned by the Hub. It is enabled with `ENABLE_GYRO_ASSIST` in both Hub programs.
 
 `hub.imu.heading()` returns a continuous (unwrapped) heading in degrees,
 clockwise positive, resolved about the vertical axis automatically from
 gravity, so the Hub mounting orientation does not matter as long as one face
-stays up. The yaw rate is derived from consecutive heading samples so both
-terms share the same axis and sign; only the heading-to-steering direction
-mapping needs on-car calibration via `YAW_SIGN`.
+stays up. Yaw rate is derived from consecutive heading samples. `YAW_SIGN`
+maps clockwise-positive sensor rotation onto the steering motor's positive
+direction.
 
-While the driver steers, the held heading tracks the live heading (no
-correction). When the wheel returns to center **and** throttle is applied, the
-setpoint freezes and the controller counters drift with
+The controller first converts driver steering into a permitted same-direction
+yaw rate:
 
 ```
-correction = YAW_SIGN * (ASSIST_KP * heading_error + ASSIST_KD * yaw_rate)
-target    = driver_target - correction
+aligned_yaw_rate = YAW_SIGN * measured_yaw_rate
+allowed_yaw_rate = driver_target * ASSIST_YAW_RATE_PER_STEER
 ```
 
-added to the driver's steering target, then clamped to the calibrated limits.
-The heading error wraps to [-180, 180] so the controller stays correct after
-one or more full turns. The correction is clamped to `ASSIST_MAX` degrees
-either way ("help a little", not an autopilot), and the assist is disabled
-below `ASSIST_THROTTLE_MIN` so the steering never hunts while parked or
-coasting. A small hysteresis (`ASSIST_DEADBAND_ENTER` / `..._EXIT`) prevents
-chattering between the straight and steering modes.
+Yaw within that allowance receives no correction, so the gyro does not fight
+an intentional turn or add steering to make the turn start faster. Rotation
+beyond the allowance is the `excess_yaw_rate`. If the driver counter-steers
+opposite the current rotation, all of the measured rate is considered excess,
+so the gyro complements the driver's recovery input. After filtering and
+removing the yaw-rate deadband:
 
-Heading is pure gyro integration (gravity cannot correct yaw), so it drifts
-over long periods. The feature is for short-term straight-line stabilization
-(seconds), not absolute navigation.
+```
+correction = ASSIST_GAIN * excess_yaw_rate
+target     = driver_target - correction
+```
 
-Defaults (in `hub/main.py` and `hub/smoke_test.py`):
+The correction is clamped to `ASSIST_MAX` degrees and the final target is
+clamped to the calibrated steering limits. The production program sets
+`ASSIST_ALWAYS_ACTIVE = True`, so assist starts immediately after steering
+calibration, remains active before arming, and also operates while parked,
+coasting, or reversing. Arduino drive output remains stopped before arming, so
+the car can be rotated by hand to verify the correction direction safely.
+Because steering produces the opposite yaw direction in reverse, test reverse
+handling carefully; the same correction sign that stabilizes forward driving
+can reinforce rotation in reverse.
 
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `ENABLE_GYRO_ASSIST` | `True` | Master switch |
-| `ASSIST_KP` | `0.4` | deg steering / deg heading error |
-| `ASSIST_KD` | `0.15` | deg steering / (deg/s yaw) |
-| `ASSIST_DEADBAND_ENTER` | `3` | deg; below this, hold the heading |
-| `ASSIST_DEADBAND_EXIT` | `6` | deg; above this, the driver is steering |
-| `ASSIST_MAX` | `15` | max correction in deg |
-| `ASSIST_THROTTLE_MIN` | `5` | `|throttle|` below which assist is off |
-| `YAW_SIGN` | `1` | flip to `-1` if the correction fights the car |
+The smoke-test program retains the forward-throttle gate. When
+`ASSIST_ALWAYS_ACTIVE` is `False`, assist is active only at or above
+`ASSIST_THROTTLE_MIN` forward trigger intent.
 
-`YAW_SIGN` is the only value that must be set on the car: drive on a straight,
-let the car drift, and confirm the correction opposes the drift; flip it to
-`-1` if it instead makes the drift worse. The smoke-test program runs the same
-assist against the bench backend, so the gains can be tuned on the bench with
-the real steering motor but simulated drive output.
+Defaults:
 
-The pure control law is `HeadingHold` in both Hub programs and is mirrored by
-`test/test_assist.py` (run with `./test/run-python-tests.sh`), the same
-mirroring approach used for the throttle response curve in the native C++
-tests.
+| Setting | Production | Smoke test | Meaning |
+| --- | --- | --- | --- |
+| `ENABLE_GYRO_ASSIST` | `True` | `True` | Master switch |
+| `ASSIST_ALWAYS_ACTIVE` | `True` | `False` | Bypass the forward-throttle gate |
+| `ASSIST_GAIN` | `1.75` | `0.10` | deg steering / (deg/s excess yaw) |
+| `ASSIST_YAW_RATE_PER_STEER` | `3.0` | `3.0` | permitted deg/s yaw per deg of driver steering |
+| `ASSIST_YAW_RATE_DEADBAND` | `0` | `8` | ignored excess yaw rate in deg/s |
+| `ASSIST_FILTER_ALPHA` | `1.00` | `0.25` | yaw-rate low-pass coefficient; lower is smoother |
+| `ASSIST_MAX` | `80` | `12` | maximum correction in deg |
+| `ASSIST_THROTTLE_MIN` | `5` | `5` | gate threshold when always-active mode is off |
+| `YAW_SIGN` | `1` | `1` | flip to `-1` if the correction fights the car |
+
+`YAW_SIGN` must be set on the car. With production firmware calibrated but
+still unarmed, keep the joystick centered and rotate the car clockwise by hand:
+the wheels should steer counterclockwise. Flip `YAW_SIGN` if they steer with
+the rotation. Tune `ASSIST_GAIN` first, then increase
+`ASSIST_YAW_RATE_PER_STEER` if normal turns still feel resisted. Reduce
+`ASSIST_MAX` if recoveries are too abrupt, or reduce `ASSIST_FILTER_ALPHA` if
+the steering chatters. The production profile is the midpoint between the
+tested `1.00`/60-degree and `2.50`/100-degree profiles: `1.75` gain, no
+deadband or filtering delay, and up to 80 degrees of correction before the
+calibrated mechanical-limit clamp.
+
+The pure control law is `DriftAssist` in both Hub programs and is mirrored by
+`test/test_assist.py` (run with `./test/run-python-tests.sh`).
 
 ## Steering response curve
 
@@ -226,9 +253,8 @@ controlled by `STEERING_CURVE_EXPONENT` in both Hub programs:
 
 Zero stays zero and +/-100 stays +/-100, so full lock is always available
 regardless of the exponent. The curve is applied in `steering_target` before
-the limit mapping, so it also widens the joystick range that counts as
-"straight" for the gyro assist deadband, which complements the heading hold on
-straights. The pure curve and target mapping are mirrored by
+the limit mapping and before the drift assist derives the driver's permitted
+yaw rate. The pure curve and target mapping are mirrored by
 `test/test_steering.py` (run with `./test/run-python-tests.sh`).
 
 ## UART wiring
@@ -332,6 +358,9 @@ throttle ramping to zero); `STOP`, the command-timeout failsafe, and startup
 always set both PWM inputs to zero and pull both enable inputs low
 immediately (coast), regardless of the braking setting, for safety. This
 mirrors the coast/brake/hold distinction Pybricks exposes on motors.
+It is disabled in the current production configuration so neutral current
+readings return to zero and the bridge does not remain actively braking between
+current-protection tests.
 
 ### UNO to BTS7960 control wiring
 
@@ -346,6 +375,10 @@ directions:
  Arduino D6  ----------------------------------> LPWM
  Arduino D2  ----------------------------------> R_EN
  Arduino D4  ----------------------------------> L_EN
+ Arduino A0  ----------------------------------> L_IS
+ Arduino A1  ----------------------------------> R_IS
+ L_IS -------- 300 Ω --------+
+ R_IS -------- 300 Ω --------+-----------------> GND
  Arduino 5V  ----------------------------------> VCC   (logic power only)
  Arduino GND ----------------------------------> GND
        │
@@ -358,7 +391,6 @@ directions:
  Buggy motor 2 wire 1 -------------------------> M-   (opposite polarity)
  Buggy motor 2 wire 2 -------------------------> M+   (opposite polarity)
 
- R_IS and L_IS: leave disconnected for now.
 ```
 
 The module normally has two high-current screw-terminal pairs:
@@ -382,6 +414,8 @@ polarity can destroy the module.
 | `LPWM` | D6 (PWM) |
 | `R_EN` | D2 |
 | `L_EN` | D4 |
+| `L_IS` | A0, plus an external 300 Ω resistor to GND |
+| `R_IS` | A1, plus an external 300 Ω resistor to GND |
 | `VCC` | Arduino 5 V logic supply |
 | `GND` | Arduino GND/common signal ground |
 
@@ -394,14 +428,86 @@ During reset, Arduino pins are inputs. Add a 10 kΩ pull-down from each `R_EN`
 and `L_EN` line to ground unless the exact module is verified to provide them,
 so the bridge remains disabled while the controller boots.
 
+### Current sensing and software cutoff
+
+The production build samples `L_IS` on A0 and `R_IS` on A1 every 5 ms. Every
+100 ms it prints the peak raw 10-bit ADC count seen on each channel to the USB
+serial monitor:
+
+```text
+CURRENT,L_IS_RAW,123,R_IS_RAW,7
+```
+
+Upload the production firmware, then open the USB monitor at 115200 baud:
+
+```sh
+pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
+pio device monitor --port /dev/ttyUSB0 --baud 115200
+```
+
+Open the monitor before starting `hub/main.py`: opening a serial monitor
+normally resets an UNO, so starting the Hub program afterward ensures it sees
+the Arduino's fresh `READY` handshake.
+
+The installed IBT-2 module measures 10 kΩ from each IS pin to GND. Each channel
+also has an external 300 Ω resistor to GND, giving approximately 291 Ω
+effective resistance. With a nominal 5 V ADC reference and the BTS7960's
+nominal current-sense ratio, the approximate conversion is:
+
+```text
+current ≈ raw ADC count * 0.143 A
+```
+
+That conversion is only a guide. The BTS7960 sense ratio has wide part,
+temperature, and load-current tolerance, and the two installed channels show
+different raw scaling. Protection therefore uses the directly measured raw
+counts rather than pretending both channels share an accurate amp calibration.
+
+All calibration runs had wheelspin rather than a mechanically locked
+drivetrain. The largest observed peaks were `L_IS=101` and `R_IS=50`. Initial
+thresholds are set 10% above those peaks:
+
+| Channel | Highest wheelspin peak | Trip threshold | Nominal current equivalent |
+| --- | ---: | ---: | ---: |
+| `L_IS` | 101 | 112 | about 16.0 A |
+| `R_IS` | 50 | 55 | about 7.9 A |
+
+Both channels are checked whenever motor output is nonzero because an IS output
+also acts as a BTS7960 fault indication. A reading equal to or above its
+threshold must occur in three consecutive 5 ms samples before the cutoff trips.
+This rejects an isolated PWM/noise peak while cutting a sustained overload in
+roughly 10--15 ms. On a trip the bridge is coasted before USB diagnostics are
+printed:
+
+```text
+MOTOR,0
+CURRENT_LIMIT,TRIPPED,OUTPUT,-70,L_IS_RAW,4,R_IS_RAW,56
+```
+
+The fault remains latched and all subsequent `D,...` commands are ignored.
+Xbox B sends `STOP`, which keeps the bridge coasted and clears the latch; a
+controller reset also clears it. USB then reports:
+
+```text
+CURRENT_LIMIT,CLEARED
+```
+
+These are deliberately conservative first thresholds. Tires finding more grip
+than during calibration may cause a legitimate launch to exceed the measured
+wheelspin peaks and trip the cutoff. Raise a channel threshold only after
+collecting repeatable loaded-driving data, and retain a margin below a measured
+locked-rotor current. A software cutoff does not replace a fuse or independent
+hardware protection.
+
 ### Power safety
 
 - A 2S pack is about 7.4 V nominal and 8.4 V fully charged.
 - The present build has no hardware current protection: no fuse, hardware
-  current-protection circuit, or automatic hardware cutoff is installed. It
-  also has no measured-current feedback or firmware current limit.
-- The throttle ramp, watchdog, and emergency stop do not provide current
-  protection.
+  current-protection circuit, or automatic hardware cutoff is installed. The
+  measured-current cutoff is firmware-only and depends on the Arduino, sensor
+  wiring, calibration, and program continuing to operate correctly.
+- The throttle ramp and watchdog complement the current cutoff but do not
+  replace independent current protection.
 - This unprotected arrangement is risky: the motors have already needed
   repair. Adding properly selected hardware current protection is a target for
   the next revision.
@@ -413,8 +519,11 @@ so the bridge remains disabled while the controller boots.
 - Power the Arduino and Hub/controller logic before connecting motor power.
   Disconnect motor power first when shutting the system down.
 
-If the whole car drives backward when the throttle commands forward, change
-`InvertMotor` in `src/Config.h`; do not swap wires while powered. The two motors
+The production Hub program currently sets `DRIVE_DIRECTION = -1` in
+`hub/main.py` to match the installed drivetrain orientation. Change it to `1`
+if that physical orientation is reversed later. Alternatively, a system-wide
+direction change can be made with `InvertMotor` in `src/Config.h`; do not enable
+both inversions accidentally. Do not swap wires while powered. The two motors
 must stay wired with opposite polarity so they keep spinning in opposite
 directions — to reverse only one motor's direction, swap that motor's two wires
 while powered down.
@@ -426,14 +535,18 @@ while powered down.
 - `MotorDriver`: split ramping (acceleration/deceleration/reversal dwell),
   optional dynamic braking, immediate shutdown, PWM, and the single BTS7960
   output boundary
+- `CurrentMonitor`: raw `L_IS`/`R_IS` ADC peak diagnostics over USB; no control
+  authority
+- `CurrentProtection`: consecutive-sample filtering, channel-calibrated raw
+  thresholds, immediate coast, and a STOP-reset latched fault
 - `Watchdog`: independent command timeout detection
 
-Hardware current protection, battery monitoring, current and temperature
-sensing, and automatic electrical cutoffs are not implemented in this revision.
-Hardware current protection is planned for the next revision. Telemetry and
-the future binary protocol also remain outside this phase.
+Independent hardware current protection, precision current calibration,
+battery monitoring, and temperature sensing are not implemented in this
+revision. Telemetry over the Hub link and the future binary protocol also
+remain outside this phase.
 
 The gyro steering assist lives entirely in the Pybricks Hub programs; it
 is Hub-side logic over the steering motor and IMU and is not part of the
-Arduino module set above. Its pure control law is `HeadingHold`, mirrored
+Arduino module set above. Its pure control law is `DriftAssist`, mirrored
 and unit tested in `test/test_assist.py`.

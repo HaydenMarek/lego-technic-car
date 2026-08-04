@@ -13,16 +13,19 @@ normal `uno_bts7960` production build must continue to reject USB control and
 remain paired exclusively with `hub/main.py`.
 
 The reported value is the applied PWM duty command (`0..255`), not measured
-electrical current. Measuring motor current would require connecting and
-calibrating the BTS7960 `R_IS`/`L_IS` current-sense outputs.
+electrical current. The BTS7960 `L_IS`/`R_IS` current-sense outputs are now
+connected to A0/A1 with 300 Ω external sense resistors. Production firmware
+uses measured raw thresholds for a software cutoff; precise amp reporting still
+requires calibration against a trusted current meter.
 
 ## Safety model
 
 - The present revision has no hardware current protection: no fuse, hardware
   current-protection circuit, or automatic hardware cutoff is installed.
-  Current sensing is not connected and the firmware does not limit current.
-  This is a known risk, and the motors have already needed repair. Proper
-  hardware current protection is deferred to the next revision.
+  Production firmware has a latched measured-current software cutoff, but this
+  cannot cover controller, wiring, calibration, or power-stage failures. This
+  is a known risk, and the motors have already needed repair. Proper hardware
+  current protection is deferred to the next revision.
 - Use a dedicated PlatformIO environment named
   `uno_bts7960_pwm_tuning`; never add tuning commands to
   `uno_bts7960`.

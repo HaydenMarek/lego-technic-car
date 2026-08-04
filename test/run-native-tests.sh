@@ -19,6 +19,8 @@ compile_and_run() {
     -I"$project_dir/test/native" \
     -I"$project_dir/src" \
     "$project_dir/test/native/test_main.cpp" \
+    "$project_dir/src/CurrentMonitor.cpp" \
+    "$project_dir/src/CurrentProtection.cpp" \
     "$project_dir/src/MotorDriver.cpp" \
     "$project_dir/src/Protocol.cpp" \
     "$project_dir/src/Vehicle.cpp" \
@@ -30,15 +32,20 @@ compile_and_run() {
 
 compile_and_run bench \
   -DTECHNIC_RC_ENABLE_MONITOR_COMMANDS=1 \
+  -DTECHNIC_RC_EXPECT_CURRENT_PROTECTION=0 \
   -DTECHNIC_RC_EXPECT_MONITOR_COMMANDS=1
 compile_and_run bts7960 \
   -DTECHNIC_RC_ENABLE_BTS7960=1 \
+  -DTECHNIC_RC_ENABLE_CURRENT_PROTECTION=1 \
   -DTECHNIC_RC_ENABLE_MONITOR_COMMANDS=0 \
+  -DTECHNIC_RC_EXPECT_CURRENT_PROTECTION=1 \
   -DTECHNIC_RC_EXPECT_MONITOR_COMMANDS=0
 compile_and_run brake \
   -DTECHNIC_RC_ENABLE_BTS7960=1 \
+  -DTECHNIC_RC_ENABLE_CURRENT_PROTECTION=1 \
   -DTECHNIC_RC_ENABLE_DYNAMIC_BRAKING=1 \
   -DTECHNIC_RC_ENABLE_MONITOR_COMMANDS=0 \
+  -DTECHNIC_RC_EXPECT_CURRENT_PROTECTION=1 \
   -DTECHNIC_RC_EXPECT_MONITOR_COMMANDS=0
 
 echo "Native bench, BTS7960, and dynamic-braking tests passed"

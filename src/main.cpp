@@ -2,6 +2,8 @@
 #include <SoftwareSerial.h>
 
 #include "Config.h"
+#include "CurrentMonitor.h"
+#include "CurrentProtection.h"
 #include "MotorDriver.h"
 #include "Protocol.h"
 #include "Vehicle.h"
@@ -16,6 +18,8 @@ class Application final {
         hubProtocol_(hubSerial_),
         monitorProtocol_(Serial),
         motorDriver_(Serial),
+        currentMonitor_(Serial),
+        currentProtection_(motorDriver_),
         vehicle_(motorDriver_),
         watchdog_(Config::FailsafeTimeoutMs) {}
 
@@ -28,6 +32,7 @@ class Application final {
 
     const uint32_t now = millis();
     motorDriver_.begin(now);
+    currentMonitor_.begin(now);
     vehicle_.stop();
     watchdog_.begin(now);
 
@@ -35,6 +40,9 @@ class Application final {
     Serial.println(Config::EnableBts7960Outputs
                        ? F("Motor output: BTS7960")
                        : F("Motor output: serial bench mode"));
+    Serial.println(Config::EnableCurrentProtection
+                       ? F("Current protection: ON")
+                       : F("Current protection: OFF"));
     Serial.println(F("Commands: PING | MODE | STOP | D,<throttle>"));
     hubProtocol_.sendReady();
   }
@@ -56,6 +64,14 @@ class Application final {
     }
 
     motorDriver_.update(now);
+    CurrentSenseSample currentSample;
+    if (currentMonitor_.update(now, currentSample) &&
+        currentProtection_.evaluate(currentSample)) {
+      // CurrentProtection has already coasted the bridge. Print only after the
+      // safety action so USB serial cannot delay cutoff.
+      vehicle_.stop();
+      currentProtection_.printTrip(Serial);
+    }
 
     digitalWrite(LED_BUILTIN, watchdog_.isTimedOut() ? LOW : HIGH);
   }
@@ -75,19 +91,24 @@ class Application final {
 
         case CommandType::Stop:
           vehicle_.stop();
+          if (currentProtection_.clearFault()) {
+            Serial.println(F("CURRENT_LIMIT,CLEARED"));
+          }
           watchdog_.refresh(now);
           protocol.sendStopAcknowledgement();
           break;
 
         case CommandType::Drive:
-          vehicle_.setThrottle(command.throttle);
-          watchdog_.refresh(now);
-          // The drive ACK is suppressed by default. It travels back over the
-          // same half-duplex SoftwareSerial line and blocks receive for ~9 ms
-          // at 9600 baud, which prevents reliable 20 ms control frames.
-          if constexpr (Config::AcknowledgeDriveCommands) {
-            protocol.sendDriveAcknowledgement(command);
+          if (currentProtection_.allowsDrive()) {
+            vehicle_.setThrottle(command.throttle);
+            // The drive ACK is suppressed by default. It travels back over the
+            // same half-duplex SoftwareSerial line and blocks receive for ~9 ms
+            // at 9600 baud, which prevents reliable 20 ms control frames.
+            if constexpr (Config::AcknowledgeDriveCommands) {
+              protocol.sendDriveAcknowledgement(command);
+            }
           }
+          watchdog_.refresh(now);
           break;
 
         case CommandType::Invalid:
@@ -101,6 +122,8 @@ class Application final {
   Protocol hubProtocol_;
   Protocol monitorProtocol_;
   MotorDriver motorDriver_;
+  CurrentMonitor currentMonitor_;
+  CurrentProtection currentProtection_;
   Vehicle vehicle_;
   Watchdog watchdog_;
 };

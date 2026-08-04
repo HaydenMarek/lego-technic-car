@@ -21,5 +21,10 @@
 - https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf
   Official BTS7960 half-bridge datasheet. Covers electrical limits,
   current-sense diagnostics, and PWM operation up to 25 kHz; useful when
-  validating PWM-frequency changes and planning current monitoring for the
-  next hardware revision.
+  validating PWM-frequency changes and maintaining the raw-threshold current
+  monitor and software cutoff.
+
+- https://docs.arduino.cc/arduino-cli/platform-specification/#serial-monitor-control-signal-configuration
+  Arduino documentation for DTR/RTS-triggered auto-reset when a serial monitor
+  opens. Relevant to starting the USB current monitor before the Hub program so
+  the Hub receives the post-reset `READY` handshake.
