@@ -63,8 +63,8 @@ STEERING_CURVE_EXPONENT = 2
 # steering-to-yaw relationship is inverted, so reverse handling must be tested
 # carefully.
 
-ENABLE_GYRO_ASSIST = True
-ASSIST_ALWAYS_ACTIVE = True
+ENABLE_GYRO_ASSIST = False
+ASSIST_ALWAYS_ACTIVE = False
 
 # Degrees of steering correction per deg/s of excess yaw rate.
 ASSIST_GAIN = 1.75
