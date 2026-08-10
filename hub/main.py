@@ -16,7 +16,7 @@ CONTROL_PERIOD_MS = 20
 ARM_TRIGGER_MAX = 2
 # The limited mode caps the command sent to the Arduino before its throttle
 # response curve is applied. Full mode retains the normal -100..100 range.
-LIMITED_DRIVE_MAX = 80
+LIMITED_DRIVE_MAX = 75
 FULL_DRIVE_MAX = 100
 
 # Reverse both drive motors together to match their physical mounting.
@@ -48,42 +48,47 @@ STEERING_CURVE_EXPONENT = 2
 # ---------------------------------------------------------------------------
 # Gyro steering assist: RC drift stabilization
 # ---------------------------------------------------------------------------
-# The Technic Hub's built-in IMU adds a small counter-steering offset when the
-# car rotates faster than the driver's steering asks for. Unlike heading hold,
-# this does not remember or return to an earlier direction: once the unwanted
-# rotation settles, the correction returns to zero at the car's new heading.
+# The Technic Hub's built-in IMU turns driver steering into a yaw-rate target.
+# It adds steering while the car is rotating too slowly to help start a slide,
+# then counter-steers only when rotation is too fast. During an established
+# slide, driver counter-steer holds a nonzero yaw rate instead of trying to
+# straighten the car. Unlike heading hold, it never remembers or returns to an
+# earlier direction.
 #
 # hub.imu.heading() returns a continuous (unwrapped) heading in degrees that is
 # clockwise positive and resolved about the vertical axis automatically from
 # gravity. Consecutive readings provide mounting-independent yaw rate. YAW_SIGN
 # maps that rate onto the steering motor's positive direction.
 #
-# Steering input grants a same-direction yaw-rate allowance, so normal turns are
-# left alone. Only yaw beyond that allowance is damped. Opposite-direction yaw
-# is always damped, which complements deliberate counter-steering during a
-# slide. The assist is filtered, deadbanded, and capped. It remains active after
-# calibration even while stopped so counter-steering is visible when the car is
-# rotated by hand. This also keeps it active in reverse, where the physical
+# Same-direction steering asks for a proportional yaw rate. If the driver
+# counter-steers against an already rotating car, the target becomes the drift
+# yaw rate below, so a controlled slide can be sustained. The assist is
+# filtered, deadbanded, and capped. It remains active after calibration even
+# while stopped so correction direction is visible when the car is rotated by
+# hand. This also keeps it active in reverse, where the physical
 # steering-to-yaw relationship is inverted, so reverse handling must be tested
 # carefully.
 
 ENABLE_GYRO_ASSIST = True
 ASSIST_ALWAYS_ACTIVE = True
 
-# Degrees of steering correction per deg/s of excess yaw rate.
-ASSIST_GAIN = 1.75
-# Same-direction yaw rate allowed per degree of driver steering target. This
-# lets the car follow intentional turns without the gyro fighting the driver.
+# Degrees of steering correction per deg/s of yaw-rate error.
+ASSIST_GAIN = 0.35
+# Requested yaw rate per degree of same-direction driver steering target.
 ASSIST_YAW_RATE_PER_STEER = 3.0
+# Once the driver counter-steers against this much yaw, hold the slide at this
+# yaw rate rather than commanding a turn in the counter-steer's direction.
+ASSIST_DRIFT_ENTRY_YAW_RATE = 20
+ASSIST_DRIFT_YAW_RATE = 120
 # Ignore small excess rates to prevent steering chatter from gyro noise.
 ASSIST_YAW_RATE_DEADBAND = 2
 # Low-pass coefficient for yaw rate (0..1). Lower is smoother but reacts later.
 ASSIST_FILTER_ALPHA = 0.65
 # Maximum corrective offset in degrees either way.
-ASSIST_MAX = 80
+ASSIST_MAX = 35
 # Maximum correction change per 20 ms control frame. This limits the command
-# slew to 400 deg/s and prevents instant full-left/full-right reversals.
-ASSIST_CORRECTION_SLEW = 8
+# slew to 250 deg/s and prevents instant full-left/full-right reversals.
+ASSIST_CORRECTION_SLEW = 5
 # Fallback gate used only when ASSIST_ALWAYS_ACTIVE is False.
 ASSIST_THROTTLE_MIN = 5
 # Flip to -1 if the correction reinforces a slide instead of counter-steering.
@@ -103,11 +108,13 @@ class DriftAssist:
     test/native/test_main.cpp for the throttle response curve).
     """
 
-    def __init__(self, gain, yaw_rate_per_steer, yaw_rate_deadband,
-                 filter_alpha, assist_max, correction_slew, always_active,
-                 throttle_min, yaw_sign, dt):
+    def __init__(self, gain, yaw_rate_per_steer, drift_entry_yaw_rate,
+                 drift_yaw_rate, yaw_rate_deadband, filter_alpha, assist_max,
+                 correction_slew, always_active, throttle_min, yaw_sign, dt):
         self.gain = gain
         self.yaw_rate_per_steer = yaw_rate_per_steer
+        self.drift_entry_yaw_rate = drift_entry_yaw_rate
+        self.drift_yaw_rate = drift_yaw_rate
         self.yaw_rate_deadband = yaw_rate_deadband
         self.filter_alpha = filter_alpha
         self.assist_max = assist_max
@@ -157,20 +164,22 @@ class DriftAssist:
         )
         aligned_yaw_rate = self.yaw_sign * self.filtered_yaw_rate
 
-        # Driver steering opens a permitted yaw envelope in the same direction.
-        # Inside it, correction stays zero; the gyro therefore never adds
-        # steering merely to make the car turn faster.
-        allowed_yaw_rate = base * self.yaw_rate_per_steer
-        if aligned_yaw_rate * allowed_yaw_rate > 0:
-            excess = aligned_yaw_rate
-            if abs(aligned_yaw_rate) <= abs(allowed_yaw_rate):
-                excess = 0.0
-            elif aligned_yaw_rate > 0:
-                excess -= abs(allowed_yaw_rate)
-            else:
-                excess += abs(allowed_yaw_rate)
-        else:
-            excess = aligned_yaw_rate
+        # Normal steering requests a yaw rate in the same direction. This
+        # deliberately adds steering when the car has not started rotating at
+        # that rate yet, rather than waiting to counter-steer excess yaw.
+        desired_yaw_rate = base * self.yaw_rate_per_steer
+
+        # Once a slide is underway, counter-steer means "hold this drift", not
+        # "reverse the yaw". Keep a signed nonzero yaw-rate target until the
+        # rotation falls below the entry threshold or the driver steers with it.
+        if (aligned_yaw_rate * base < 0
+                and abs(aligned_yaw_rate) >= self.drift_entry_yaw_rate):
+            desired_yaw_rate = (
+                self.drift_yaw_rate if aligned_yaw_rate > 0
+                else -self.drift_yaw_rate
+            )
+
+        excess = aligned_yaw_rate - desired_yaw_rate
 
         # Remove the deadband continuously so there is no correction step at
         # its edge, then clamp the gyro to limited authority.
@@ -380,6 +389,7 @@ async def main():
                 await wait(CONTROL_PERIOD_MS)
             assist = DriftAssist(
                 ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
+                ASSIST_DRIFT_ENTRY_YAW_RATE, ASSIST_DRIFT_YAW_RATE,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
                 ASSIST_MAX, ASSIST_CORRECTION_SLEW, ASSIST_ALWAYS_ACTIVE,
                 ASSIST_THROTTLE_MIN, YAW_SIGN, ASSIST_DT,
@@ -439,7 +449,7 @@ async def main():
                 positive_limit,
             )
 
-            # Fold rate-only drift counter-steering into the target. Use
+            # Fold yaw-rate drift assist into the target. Use
             # unmapped trigger intent so the assist can distinguish physical
             # forward from reverse even when drive output is inverted.
             if assist is not None:

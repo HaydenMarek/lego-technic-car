@@ -87,8 +87,8 @@ D,-25
 STOP
 ```
 
-For `D,50`, the default quadratic throttle curve targets 25% output, so the
-temporary motor driver ramps through `MOTOR,20` to `MOTOR,25`.
+For `D,50`, the active linear throttle curve targets 50% output, so the
+temporary motor driver ramps through `MOTOR,20`, `MOTOR,40`, and `MOTOR,50`.
 After 500 ms without another valid command, it prints `MOTOR,0` and the
 failsafe message.
 
@@ -126,13 +126,12 @@ pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 
 The Hub program requires `MODE,BTS7960`, successful steering calibration,
 neutral triggers, and a new A-button press before it sends throttle. Arming
-starts in limited-power mode: the Hub caps its `D,<throttle>` command at 70 and
+starts in limited-power mode: the Hub caps its `D,<throttle>` command at 75 and
 shows blue on its status light. Press both Xbox bumpers (`LB` + `RB`) to enable
 the normal 100-command range and change the light to red. In full-power mode,
 the first new Xbox B press returns to limited-power/blue; a later new B press
-from limited-power mode stops and ends the program. Because the Arduino applies
-its quadratic throttle curve after the command is received, a 70 command is a
-49% motor-output target with the default curve.
+from limited-power mode stops and ends the program. The Arduino's active linear
+throttle curve preserves the 75 command as a 75% motor-output target.
 
 Both Hub programs map Xbox triggers to throttle, control the Powered Up
 steering motor directly from the left joystick, and send only `D,<throttle>`
@@ -146,7 +145,7 @@ Defaults:
 - Steering travel: measured automatically at startup
 - Steering response: quadratic curve (`STEERING_CURVE_EXPONENT = 2`),
   less sensitive near center, full lock at full stick
-- Xbox A button: arm production drive at the 70-command limit (blue Hub light)
+- Xbox A button: arm production drive at the 75-command limit (blue Hub light)
 - Xbox LB + RB: switch production drive to its 100-command limit (red light)
 - Xbox B button: full to limited mode on its first press; stop and end on a
   subsequent press in limited mode
@@ -167,13 +166,15 @@ stall detection; the default is 25%.
 
 ## Gyro steering assist
 
-The Technic Hub's built-in IMU adds RC-style drift stabilization to the
-steering motor. It counter-steers when the car rotates faster than the driver's
-steering input calls for, rather than trying to preserve a compass direction.
-Once the rotation settles, correction returns to zero at the car's new
-heading; it never steers back toward an old heading. The assist runs entirely
-on the Hub, so the Arduino throttle/UART path is unchanged and steering remains
-owned by the Hub. It is enabled or disabled independently with
+The Technic Hub's built-in IMU adds RC-style drift assist to the steering
+motor. It tracks a driver-requested yaw rate: it adds steering when the car is
+rotating too slowly to help start a turn or slide, and counter-steers when yaw
+is too fast. When the driver counter-steers an established slide, it holds a
+nonzero yaw rate rather than trying to straighten the car. Once rotation
+settles, correction returns to zero at the car's new heading; it never steers
+back toward an old heading. The assist runs entirely on the Hub, so the Arduino
+throttle/UART path is unchanged and steering remains owned by the Hub. It is
+enabled or disabled independently with
 `ENABLE_GYRO_ASSIST` in each Hub program; both current Hub programs enable it.
 
 `hub.imu.heading()` returns a continuous (unwrapped) heading in degrees,
@@ -183,24 +184,22 @@ stays up. Yaw rate is derived from consecutive heading samples. `YAW_SIGN`
 maps clockwise-positive sensor rotation onto the steering motor's positive
 direction.
 
-The controller first converts driver steering into a permitted same-direction
-yaw rate:
+The controller converts same-direction driver steering into a desired yaw rate:
 
 ```
 aligned_yaw_rate = YAW_SIGN * measured_yaw_rate
-allowed_yaw_rate = driver_target * ASSIST_YAW_RATE_PER_STEER
+desired_yaw_rate = driver_target * ASSIST_YAW_RATE_PER_STEER
 ```
 
-Yaw within that allowance receives no correction, so the gyro does not fight
-an intentional turn or add steering to make the turn start faster. Rotation
-beyond the allowance is the `excess_yaw_rate`. If the driver counter-steers
-opposite the current rotation, all of the measured rate is considered excess,
-so the gyro complements the driver's recovery input. After filtering and
-removing the yaw-rate deadband, proportional yaw-rate feedback calculates a
-requested correction:
+If the driver counter-steers against yaw above
+`ASSIST_DRIFT_ENTRY_YAW_RATE`, the desired yaw rate instead becomes
+`ASSIST_DRIFT_YAW_RATE` with the current yaw's sign. This preserves the slide
+while still adding counter-steer when it spins faster than the target. The
+controller then uses the difference between actual and desired rate:
 
 ```
-requested_correction = ASSIST_GAIN * excess_yaw_rate
+yaw_rate_error = aligned_yaw_rate - desired_yaw_rate
+requested_correction = ASSIST_GAIN * yaw_rate_error
 ```
 
 The request is clamped to `ASSIST_MAX`, then an output slew limiter permits at
@@ -234,25 +233,28 @@ Defaults:
 | --- | --- | --- | --- |
 | `ENABLE_GYRO_ASSIST` | `True` | `True` | Master switch |
 | `ASSIST_ALWAYS_ACTIVE` | `True` | `False` | Bypass the forward-throttle gate |
-| `ASSIST_GAIN` | `1.75` | `0.10` | deg steering / (deg/s excess yaw) |
-| `ASSIST_YAW_RATE_PER_STEER` | `3.0` | `3.0` | permitted deg/s yaw per deg of driver steering |
+| `ASSIST_GAIN` | `0.35` | `0.10` | deg steering / (deg/s yaw-rate error) |
+| `ASSIST_YAW_RATE_PER_STEER` | `3.0` | `3.0` | requested deg/s yaw per deg of same-direction driver steering |
+| `ASSIST_DRIFT_ENTRY_YAW_RATE` | `20` | `20` | yaw rate that enables slide-hold when counter-steering |
+| `ASSIST_DRIFT_YAW_RATE` | `120` | `120` | yaw rate held while counter-steering an established slide |
 | `ASSIST_YAW_RATE_DEADBAND` | `2` | `8` | ignored excess yaw rate in deg/s |
 | `ASSIST_FILTER_ALPHA` | `0.65` | `0.25` | yaw-rate low-pass coefficient; lower is smoother |
-| `ASSIST_MAX` | `80` | `12` | maximum correction in deg |
-| `ASSIST_CORRECTION_SLEW` | `8` | `24` | maximum correction change per 20 ms frame |
+| `ASSIST_MAX` | `35` | `12` | maximum correction in deg |
+| `ASSIST_CORRECTION_SLEW` | `5` | `24` | maximum correction change per 20 ms frame |
 | `ASSIST_THROTTLE_MIN` | `5` | `5` | gate threshold when always-active mode is off |
 | `YAW_SIGN` | `1` | `1` | flip to `-1` if the correction fights the car |
 
 `YAW_SIGN` must be set on the car. With production firmware calibrated but
 still unarmed, keep the joystick centered and rotate the car clockwise by hand:
 the wheels should steer counterclockwise. Flip `YAW_SIGN` if they steer with
-the rotation. Tune `ASSIST_GAIN` first, then increase
-`ASSIST_YAW_RATE_PER_STEER` if normal turns still feel resisted. Reduce
-`ASSIST_MAX` if recoveries are too abrupt, or reduce `ASSIST_FILTER_ALPHA` if
-the steering chatters. The production profile retains the tested midpoint gain
-and authority (`1.75` and 80 degrees), but adds a 2 deg/s deadband, moderate
-input filtering, and an 8-degree-per-frame output slew limit to suppress the
-observed rapid full-left/full-right oscillation.
+the rotation. Tune `ASSIST_GAIN` first: raise it for stronger yaw-rate tracking
+or lower it if the steering oscillates. Increase `ASSIST_YAW_RATE_PER_STEER` to
+make turn-in more assertive. Raise `ASSIST_DRIFT_YAW_RATE` for longer, faster
+slides, or lower it to make the car recover sooner. Reduce `ASSIST_MAX` if
+corrections are too abrupt, or reduce `ASSIST_FILTER_ALPHA` if the steering
+chatters. The production profile uses moderate gain and 35-degree authority
+with a 2 deg/s deadband, input filtering, and a 5-degree-per-frame output slew
+limit to suppress rapid full-left/full-right oscillation.
 
 The pure control law is `DriftAssist` in both Hub programs and is mirrored by
 `test/test_assist.py` (run with `./test/run-python-tests.sh`).
@@ -328,30 +330,29 @@ pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 
 ### Throttle response curve
 
-The raw `-100..100` throttle the Hub sends is shaped by a response curve
-before it reaches the motor driver, so the lower half of the trigger travel
-maps to a smaller fraction of motor output. This gives finer low-speed control
-while still reaching full output at full trigger. The curve is
+The raw `-100..100` throttle the Hub sends can be shaped by a response curve
+before it reaches the motor driver. The active production and bench setting is
+linear, so the command reaches the motor driver unchanged. The available curve
+is
 
 ```
 output = sign(input) * |input|^exp / 100^(exp-1)
 ```
 
 controlled by `Config::ThrottleCurveExponent` (build flag
-`-DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=N`):
+`-DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=N`). The active value is `1`:
 
 | Exponent | Curve | 50% trigger | 100% trigger |
 | --- | --- | --- | --- |
-| 1 | linear (no shaping) | 50% | 100% |
-| 2 (default) | quadratic | 25% | 100% |
+| 1 (active) | linear (no shaping) | 50% | 100% |
+| 2 | quadratic | 25% | 100% |
 | 3 | cubic | 12% | 100% |
 
-The default quadratic curve means you have to pull the trigger much further
-before the car accelerates hard, so small trigger movements stay slow and
-controllable. Raise the exponent to soften the low end further, or set it to
-`1` to restore the original linear feel. The curve is applied in `Vehicle`
-after the UART command is parsed, so it covers both the Hub link and the USB
-serial monitor, and it is independent of the motor ramp below.
+The active linear curve gives a direct trigger-to-output relationship. Set the
+exponent to `2` for a quadratic low-end softening (50% trigger becomes 25%
+output), or to `3` for a cubic curve (50% becomes 12%). The curve is applied in
+`Vehicle` after the UART command is parsed, so it covers both the Hub link and
+the USB serial monitor, and it is independent of the motor ramp below.
 
 The motor output uses separate rates for acceleration, ordinary deceleration,
 and a requested direction reversal:

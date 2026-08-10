@@ -15,7 +15,7 @@ normative project specification as defined by `AGENTS.md`.
 
 | # | Work item | Priority | GitHub issue | Status |
 | ---: | --- | --- | --- | --- |
-| 1 | Reconcile documented and production defaults | High | [#1](https://github.com/HaydenMarek/lego-technic-car/issues/1) | Not started |
+| 1 | Reconcile documented and production defaults | High | [#1](https://github.com/HaydenMarek/lego-technic-car/issues/1) | Current code values documented; profile contract tests remain in #2 |
 | 2 | Add contract tests for production profiles and shared control logic | High | [#2](https://github.com/HaydenMarek/lego-technic-car/issues/2) | Not started |
 | 3 | Replace the conversational documentation trigger with a definition of done | High | [#3](https://github.com/HaydenMarek/lego-technic-car/issues/3) | Not started |
 | 4 | Add explicit agent safety boundaries for physical hardware operations | High | [#4](https://github.com/HaydenMarek/lego-technic-car/issues/4) | Not started |
@@ -38,8 +38,8 @@ Every issue created from this review uses these sections:
 
 ## Recommended order
 
-1. Resolve the intended production defaults first; other documentation and
-   profile tests depend on that decision.
+1. Keep the confirmed production defaults documented; profile tests should
+   protect them from future drift.
 2. Update the agent definition of done and hardware-operation boundaries.
 3. Clarify the safety wording and repair external references.
 4. Add profile contract tests, a single verification command, and CI.
@@ -50,10 +50,12 @@ Every issue created from this review uses these sections:
 
 The project owner should provide the few facts an agent cannot safely infer:
 
-- Whether production gyro assist should remain disabled or return to the
-  documented enabled state.
-- Whether the production throttle curve should remain linear or return to the
-  documented quadratic default.
+- Production gyro assist is enabled (`ENABLE_GYRO_ASSIST = True` in
+  `hub/main.py`).
+- The Arduino throttle curve is linear
+  (`TECHNIC_RC_THROTTLE_CURVE_EXPONENT = 1` in `src/Config.h`).
+- Production arming starts in the 75-command limited-power mode; the Xbox
+  bumpers unlock the normal 100-command range.
 - The current physical hardware revision and bill of materials, including the
   exact motor-driver board, battery, buck converter, current-sense resistors,
   capacitors, and presence or absence of an independent fuse or cutoff.

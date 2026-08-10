@@ -31,9 +31,9 @@ flowchart TD
     bUnarmed -- yes --> shutdown
     bUnarmed -- no --> armCheck{"Fresh A press<br/>AND both triggers at most 2?"}
     armCheck -- no --> unarmedLoop
-    armCheck -- yes --> limitedArmed["ARMED: LIMITED-POWER MODE<br/>Maximum drive command is 70%<br/>Set Technic Hub light blue"]
+    armCheck -- yes --> limitedArmed["ARMED: LIMITED-POWER MODE<br/>Maximum drive command is 75%<br/>Set Technic Hub light blue"]
 
-    limitedArmed --> limitedLoop["Every 20 ms:<br/>- Limit throttle to 70%<br/>- B exits<br/>- Read triggers and steering<br/>- Track steering target, with optional assist<br/>- Send D,throttle<br/>- Drain UART"]
+    limitedArmed --> limitedLoop["Every 20 ms:<br/>- Limit throttle to 75%<br/>- B exits<br/>- Read triggers and steering<br/>- Track steering target, with optional assist<br/>- Send D,throttle<br/>- Drain UART"]
     limitedLoop --> bLimited{"B pressed?"}
     bLimited -- yes --> shutdown
     bLimited -- no --> fullPowerCheck{"LB and RB<br/>pressed together?"}
@@ -83,7 +83,7 @@ Notes:
 - `A` must transition from released to pressed after reaching the unarmed loop.
   Holding A during calibration does not arm. Both triggers must read at most 2
   at the arm check. A successful arm starts **limited-power mode**, which caps
-  the drive command at 70%.
+  the drive command at 75%.
 - While in limited-power mode, pressing the Xbox controller's `LB` and `RB`
   shoulder buttons together switches to full-power mode (100% maximum) and
   changes the Technic Hub light to red. Pressing `B` once from full-power mode

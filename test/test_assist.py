@@ -10,11 +10,13 @@ import sys
 
 
 class DriftAssist:
-    def __init__(self, gain, yaw_rate_per_steer, yaw_rate_deadband,
-                 filter_alpha, assist_max, correction_slew, always_active,
-                 throttle_min, yaw_sign, dt):
+    def __init__(self, gain, yaw_rate_per_steer, drift_entry_yaw_rate,
+                 drift_yaw_rate, yaw_rate_deadband, filter_alpha, assist_max,
+                 correction_slew, always_active, throttle_min, yaw_sign, dt):
         self.gain = gain
         self.yaw_rate_per_steer = yaw_rate_per_steer
+        self.drift_entry_yaw_rate = drift_entry_yaw_rate
+        self.drift_yaw_rate = drift_yaw_rate
         self.yaw_rate_deadband = yaw_rate_deadband
         self.filter_alpha = filter_alpha
         self.assist_max = assist_max
@@ -46,18 +48,15 @@ class DriftAssist:
             raw_yaw_rate - self.filtered_yaw_rate
         )
         aligned_yaw_rate = self.yaw_sign * self.filtered_yaw_rate
-        allowed_yaw_rate = base * self.yaw_rate_per_steer
+        desired_yaw_rate = base * self.yaw_rate_per_steer
+        if (aligned_yaw_rate * base < 0
+                and abs(aligned_yaw_rate) >= self.drift_entry_yaw_rate):
+            desired_yaw_rate = (
+                self.drift_yaw_rate if aligned_yaw_rate > 0
+                else -self.drift_yaw_rate
+            )
 
-        if aligned_yaw_rate * allowed_yaw_rate > 0:
-            excess = aligned_yaw_rate
-            if abs(aligned_yaw_rate) <= abs(allowed_yaw_rate):
-                excess = 0.0
-            elif aligned_yaw_rate > 0:
-                excess -= abs(allowed_yaw_rate)
-            else:
-                excess += abs(allowed_yaw_rate)
-        else:
-            excess = aligned_yaw_rate
+        excess = aligned_yaw_rate - desired_yaw_rate
 
         if abs(excess) <= self.yaw_rate_deadband:
             correction = 0.0
@@ -97,11 +96,12 @@ def close(actual, expected):
     return abs(actual - expected) < 0.000001
 
 
-def make(gain=0.1, rate_per_steer=3.0, deadband=0.0, alpha=1.0,
-         amax=12, slew=1000, always_active=False, tmin=5, yaw=1, dt=0.02):
+def make(gain=0.1, rate_per_steer=3.0, drift_entry=20,
+         drift_rate=120, deadband=0.0, alpha=1.0, amax=12, slew=1000,
+         always_active=False, tmin=5, yaw=1, dt=0.02):
     return DriftAssist(
-        gain, rate_per_steer, deadband, alpha, amax, slew, always_active,
-        tmin, yaw, dt
+        gain, rate_per_steer, drift_entry, drift_rate, deadband, alpha, amax,
+        slew, always_active, tmin, yaw, dt
     )
 
 
@@ -145,42 +145,45 @@ def settled_new_heading_has_no_correction():
     check("new_heading.target", target == 0.0, "got {0}".format(target))
 
 
-def driver_yaw_allowance_preserves_intentional_turns():
+def driver_yaw_target_promotes_turn_initiation():
     assist = make(gain=0.1, rate_per_steer=3.0, amax=100)
     assist.step(20, 0.0, 50)
 
-    # 20 degrees of steering allows +60 deg/s without assistance.
+    # 20 degrees of steering requests +60 deg/s. At +50 deg/s the controller
+    # adds one degree in the driver's direction to build the turn.
     target, correction = assist.step(20, 1.0, 50)  # +50 deg/s
-    check("allowance.inside", correction == 0.0,
+    check("target.below_requested", close(correction, -1.0),
           "got {0}".format(correction))
-    check("allowance.driver_target", target == 20.0,
+    check("target.promotes_turn", close(target, 21.0),
           "got {0}".format(target))
 
-    # +100 deg/s exceeds the allowance by 40 deg/s, so only the excess is
-    # counter-steered. The gyro never boosts steering to initiate the turn.
+    # At +100 deg/s it counter-steers the +40 deg/s overshoot.
     target, correction = assist.step(20, 3.0, 50)
-    check("allowance.excess", close(correction, 4.0),
+    check("target.overshoot", close(correction, 4.0),
           "got {0}".format(correction))
-    check("allowance.reduced_target", close(target, 16.0),
-          "got {0}".format(target))
-
-    target, correction = assist.step(20, 3.0, 50)  # zero yaw rate
-    check("allowance.never_boosts", correction == 0.0,
-          "got {0}".format(correction))
-    check("allowance.no_boost_target", target == 20.0,
+    check("target.countersteers_overshoot", close(target, 16.0),
           "got {0}".format(target))
 
 
-def opposite_yaw_complements_countersteering():
-    assist = make(gain=0.1, rate_per_steer=3.0, amax=100)
+def countersteering_holds_a_drift_yaw_rate():
+    assist = make(gain=0.1, rate_per_steer=3.0, drift_entry=20,
+                  drift_rate=120, amax=100)
     assist.step(-20, 0.0, 50)
 
-    # Driver is steering left while the car still rotates right. The complete
-    # rightward rate is unwanted, so assist adds another 10 degrees left.
+    # Driver counter-steers left while the car rotates right at 100 deg/s. The
+    # target remains +120 deg/s, so the assist reduces counter-steer to keep
+    # the slide alive instead of asking the car to yaw left.
     target, correction = assist.step(-20, 2.0, 50)
-    check("countersteer.correction", close(correction, 10.0),
+    check("drift.correction", close(correction, -2.0),
           "got {0}".format(correction))
-    check("countersteer.target", close(target, -30.0),
+    check("drift.target", close(target, -18.0),
+          "got {0}".format(target))
+
+    # At 150 deg/s it adds counter-steer, limiting the slide to the same rate.
+    target, correction = assist.step(-20, 5.0, 50)
+    check("drift.overspeed_correction", close(correction, 3.0),
+          "got {0}".format(correction))
+    check("drift.overspeed_target", close(target, -23.0),
           "got {0}".format(target))
 
 
@@ -289,8 +292,8 @@ def main():
     first_frame_passes_through()
     centered_steering_countersteers_yaw()
     settled_new_heading_has_no_correction()
-    driver_yaw_allowance_preserves_intentional_turns()
-    opposite_yaw_complements_countersteering()
+    driver_yaw_target_promotes_turn_initiation()
+    countersteering_holds_a_drift_yaw_rate()
     deadband_is_continuous()
     filter_smooths_rate_step()
     throttle_gate_excludes_stopped_and_reverse()

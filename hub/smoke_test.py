@@ -47,6 +47,8 @@ ASSIST_ALWAYS_ACTIVE = False
 
 ASSIST_GAIN = 0.10
 ASSIST_YAW_RATE_PER_STEER = 3.0
+ASSIST_DRIFT_ENTRY_YAW_RATE = 20
+ASSIST_DRIFT_YAW_RATE = 120
 ASSIST_YAW_RATE_DEADBAND = 8
 ASSIST_FILTER_ALPHA = 0.25
 ASSIST_MAX = 12
@@ -67,11 +69,13 @@ class DriftAssist:
     test/native/test_main.cpp for the throttle response curve).
     """
 
-    def __init__(self, gain, yaw_rate_per_steer, yaw_rate_deadband,
-                 filter_alpha, assist_max, correction_slew, always_active,
-                 throttle_min, yaw_sign, dt):
+    def __init__(self, gain, yaw_rate_per_steer, drift_entry_yaw_rate,
+                 drift_yaw_rate, yaw_rate_deadband, filter_alpha, assist_max,
+                 correction_slew, always_active, throttle_min, yaw_sign, dt):
         self.gain = gain
         self.yaw_rate_per_steer = yaw_rate_per_steer
+        self.drift_entry_yaw_rate = drift_entry_yaw_rate
+        self.drift_yaw_rate = drift_yaw_rate
         self.yaw_rate_deadband = yaw_rate_deadband
         self.filter_alpha = filter_alpha
         self.assist_max = assist_max
@@ -103,18 +107,15 @@ class DriftAssist:
             raw_yaw_rate - self.filtered_yaw_rate
         )
         aligned_yaw_rate = self.yaw_sign * self.filtered_yaw_rate
-        allowed_yaw_rate = base * self.yaw_rate_per_steer
+        desired_yaw_rate = base * self.yaw_rate_per_steer
+        if (aligned_yaw_rate * base < 0
+                and abs(aligned_yaw_rate) >= self.drift_entry_yaw_rate):
+            desired_yaw_rate = (
+                self.drift_yaw_rate if aligned_yaw_rate > 0
+                else -self.drift_yaw_rate
+            )
 
-        if aligned_yaw_rate * allowed_yaw_rate > 0:
-            excess = aligned_yaw_rate
-            if abs(aligned_yaw_rate) <= abs(allowed_yaw_rate):
-                excess = 0.0
-            elif aligned_yaw_rate > 0:
-                excess -= abs(allowed_yaw_rate)
-            else:
-                excess += abs(allowed_yaw_rate)
-        else:
-            excess = aligned_yaw_rate
+        excess = aligned_yaw_rate - desired_yaw_rate
 
         if abs(excess) <= self.yaw_rate_deadband:
             correction = 0.0
@@ -247,6 +248,7 @@ async def main():
                 await wait(CONTROL_PERIOD_MS)
             assist = DriftAssist(
                 ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
+                ASSIST_DRIFT_ENTRY_YAW_RATE, ASSIST_DRIFT_YAW_RATE,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
                 ASSIST_MAX, ASSIST_CORRECTION_SLEW, ASSIST_ALWAYS_ACTIVE,
                 ASSIST_THROTTLE_MIN, YAW_SIGN, ASSIST_DT,
@@ -266,7 +268,7 @@ async def main():
                 positive_limit,
             )
 
-            # Fold rate-only drift counter-steering into the steering target.
+            # Fold yaw-rate drift assist into the steering target.
             if assist is not None:
                 target, _ = assist.step(target, hub.imu.heading(), throttle)
                 if target < negative_limit:
