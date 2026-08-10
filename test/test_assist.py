@@ -26,18 +26,26 @@ class DriftAssist:
         self.yaw_sign = yaw_sign
         self.dt = dt
         self.prev_heading = None
+        self.prev_time_ms = None
         self.filtered_yaw_rate = 0.0
         self.correction = 0.0
 
-    def step(self, driver_target, heading, forward_throttle):
+    def step(self, driver_target, heading, forward_throttle, now_ms=None):
         base = driver_target if driver_target is not None else 0
 
         if self.prev_heading is None:
             self.prev_heading = heading
+            self.prev_time_ms = now_ms
             return base, 0.0
 
-        raw_yaw_rate = (heading - self.prev_heading) / self.dt
+        dt = self.dt
+        if now_ms is not None and self.prev_time_ms is not None:
+            measured_dt = (now_ms - self.prev_time_ms) / 1000.0
+            if measured_dt > 0:
+                dt = measured_dt
+        raw_yaw_rate = (heading - self.prev_heading) / dt
         self.prev_heading = heading
+        self.prev_time_ms = now_ms
 
         if not self.always_active and forward_throttle < self.throttle_min:
             self.filtered_yaw_rate = 0.0
@@ -215,6 +223,17 @@ def filter_smooths_rate_step():
           "got {0}".format(correction))
 
 
+def measured_sample_interval_sets_yaw_rate():
+    assist = make(gain=1.0, amax=100)
+    assist.step(0, 0.0, 50, 1000)
+
+    # UART writes and other work can make a frame longer than its nominal
+    # 20 ms period. A 2-degree change over 40 ms is 50 deg/s, not 100 deg/s.
+    _, correction = assist.step(0, 2.0, 50, 1040)
+    check("timing.measured_interval", close(correction, 50.0),
+          "got {0}".format(correction))
+
+
 def throttle_gate_excludes_stopped_and_reverse():
     assist = make(gain=1.0, amax=100)
     assist.step(0, 0.0, 0)
@@ -296,6 +315,7 @@ def main():
     countersteering_holds_a_drift_yaw_rate()
     deadband_is_continuous()
     filter_smooths_rate_step()
+    measured_sample_interval_sets_yaw_rate()
     throttle_gate_excludes_stopped_and_reverse()
     always_active_includes_stopped_and_reverse()
     correction_is_clamped()

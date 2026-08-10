@@ -4,7 +4,7 @@ from pybricks.hubs import TechnicHub
 from pybricks.iodevices import UARTDevice, XboxController
 from pybricks.parameters import Button, Color, Port, Stop
 from pybricks.pupdevices import Motor
-from pybricks.tools import run_task, wait
+from pybricks.tools import StopWatch, run_task, wait
 
 UART_PORT = Port.C
 STEERING_MOTOR_PORT = Port.A
@@ -79,19 +79,19 @@ ENABLE_GYRO_ASSIST = True
 ASSIST_ALWAYS_ACTIVE = True
 
 # Degrees of steering correction per deg/s of yaw-rate error.
-ASSIST_GAIN = 0.35
+ASSIST_GAIN = 0.55
 # Requested yaw rate per degree of same-direction driver steering target.
 ASSIST_YAW_RATE_PER_STEER = 3.0
 # Once the driver counter-steers against this much yaw, hold the slide at this
 # yaw rate rather than commanding a turn in the counter-steer's direction.
 ASSIST_DRIFT_ENTRY_YAW_RATE = 20
-ASSIST_DRIFT_YAW_RATE = 120
+ASSIST_DRIFT_YAW_RATE = 180
 # Ignore small excess rates to prevent steering chatter from gyro noise.
 ASSIST_YAW_RATE_DEADBAND = 2
 # Low-pass coefficient for yaw rate (0..1). Lower is smoother but reacts later.
 ASSIST_FILTER_ALPHA = 0.65
 # Maximum corrective offset in degrees either way.
-ASSIST_MAX = 35
+ASSIST_MAX = 40
 # Maximum correction change per 20 ms control frame. This limits the command
 # slew to 250 deg/s and prevents instant full-left/full-right reversals.
 ASSIST_CORRECTION_SLEW = 5
@@ -99,11 +99,6 @@ ASSIST_CORRECTION_SLEW = 5
 ASSIST_THROTTLE_MIN = 5
 # Flip to -1 if the correction reinforces a slide instead of counter-steering.
 YAW_SIGN = 1
-
-# Assumed time between assist frames (seconds). The control loop targets the
-# 20 ms CONTROL_PERIOD_MS frame; the heading rate is derived with this dt.
-ASSIST_DT = CONTROL_PERIOD_MS / 1000.0
-
 
 class DriftAssist:
     """Yaw-rate counter-steering state for the gyro drift assist.
@@ -130,10 +125,11 @@ class DriftAssist:
         self.yaw_sign = yaw_sign
         self.dt = dt
         self.prev_heading = None
+        self.prev_time_ms = None
         self.filtered_yaw_rate = 0.0
         self.correction = 0.0
 
-    def step(self, driver_target, heading, forward_throttle):
+    def step(self, driver_target, heading, forward_throttle, now_ms=None):
         """Return the assist-corrected steering target for this frame.
 
         driver_target: joystick-mapped steering target in degrees (centered at
@@ -152,10 +148,19 @@ class DriftAssist:
         # across the +/-180 boundary; no wraparound handling is needed here.
         if self.prev_heading is None:
             self.prev_heading = heading
+            self.prev_time_ms = now_ms
             return base, 0.0
 
-        raw_yaw_rate = (heading - self.prev_heading) / self.dt
+        dt = self.dt
+        if now_ms is not None and self.prev_time_ms is not None:
+            measured_dt = (now_ms - self.prev_time_ms) / 1000.0
+            # A timestamp can only be zero on the first sample, but retain a
+            # safe fallback if a clock is reset while the program is running.
+            if measured_dt > 0:
+                dt = measured_dt
+        raw_yaw_rate = (heading - self.prev_heading) / dt
         self.prev_heading = heading
+        self.prev_time_ms = now_ms
 
         # An optional forward-throttle gate is retained for configurations that
         # do not want correction while parked or reversing. Production keeps
@@ -329,7 +334,7 @@ def map_drive_intent(intent, maximum):
     return -mapped if intent < 0 else mapped
 
 
-async def wait_for_arm(negative_limit, positive_limit, assist):
+async def wait_for_arm(negative_limit, positive_limit, assist, assist_clock):
     """Keep drive stopped until A is newly pressed with neutral triggers."""
 
     a_was_pressed = Button.A in controller.buttons.pressed()
@@ -353,7 +358,7 @@ async def wait_for_arm(negative_limit, positive_limit, assist):
         if assist is not None:
             drive_intent = int(right_trigger - left_trigger)
             target, _ = assist.step(
-                target, hub.imu.heading(), drive_intent
+                target, hub.imu.heading(), drive_intent, assist_clock.time()
             )
             if target < negative_limit:
                 target = negative_limit
@@ -406,13 +411,15 @@ async def main():
                 ASSIST_DRIFT_ENTRY_YAW_RATE, ASSIST_DRIFT_YAW_RATE,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
                 ASSIST_MAX, ASSIST_CORRECTION_SLEW, ASSIST_ALWAYS_ACTIVE,
-                ASSIST_THROTTLE_MIN, YAW_SIGN, ASSIST_DT,
+                ASSIST_THROTTLE_MIN, YAW_SIGN, CONTROL_PERIOD_MS / 1000.0,
             )
+        assist_clock = StopWatch()
 
         # A must be released and newly pressed while both triggers are neutral.
         # The gyro is already active here, but Arduino drive output remains
         # stopped until arming succeeds.
-        if not await wait_for_arm(negative_limit, positive_limit, assist):
+        if not await wait_for_arm(
+                negative_limit, positive_limit, assist, assist_clock):
             return
 
         # A successful arm starts at the lower command limit. The status light
@@ -468,7 +475,7 @@ async def main():
             # forward from reverse even when drive output is inverted.
             if assist is not None:
                 target, _ = assist.step(
-                    target, hub.imu.heading(), drive_intent
+                    target, hub.imu.heading(), drive_intent, assist_clock.time()
                 )
                 if target < negative_limit:
                     target = negative_limit

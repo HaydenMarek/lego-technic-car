@@ -4,7 +4,7 @@ from pybricks.hubs import TechnicHub
 from pybricks.iodevices import UARTDevice, XboxController
 from pybricks.parameters import Button, Port, Stop
 from pybricks.pupdevices import Motor
-from pybricks.tools import run_task, wait
+from pybricks.tools import StopWatch, run_task, wait
 
 UART_PORT = Port.C
 STEERING_MOTOR_PORT = Port.A
@@ -57,9 +57,6 @@ ASSIST_MAX = 12
 ASSIST_CORRECTION_SLEW = 24
 ASSIST_THROTTLE_MIN = 5
 YAW_SIGN = 1
-ASSIST_DT = CONTROL_PERIOD_MS / 1000.0
-
-
 class DriftAssist:
     """Yaw-rate counter-steering state for the gyro drift assist.
 
@@ -85,18 +82,26 @@ class DriftAssist:
         self.yaw_sign = yaw_sign
         self.dt = dt
         self.prev_heading = None
+        self.prev_time_ms = None
         self.filtered_yaw_rate = 0.0
         self.correction = 0.0
 
-    def step(self, driver_target, heading, forward_throttle):
+    def step(self, driver_target, heading, forward_throttle, now_ms=None):
         base = driver_target if driver_target is not None else 0
 
         if self.prev_heading is None:
             self.prev_heading = heading
+            self.prev_time_ms = now_ms
             return base, 0.0
 
-        raw_yaw_rate = (heading - self.prev_heading) / self.dt
+        dt = self.dt
+        if now_ms is not None and self.prev_time_ms is not None:
+            measured_dt = (now_ms - self.prev_time_ms) / 1000.0
+            if measured_dt > 0:
+                dt = measured_dt
+        raw_yaw_rate = (heading - self.prev_heading) / dt
         self.prev_heading = heading
+        self.prev_time_ms = now_ms
 
         if not self.always_active and forward_throttle < self.throttle_min:
             self.filtered_yaw_rate = 0.0
@@ -251,8 +256,9 @@ async def main():
                 ASSIST_DRIFT_ENTRY_YAW_RATE, ASSIST_DRIFT_YAW_RATE,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
                 ASSIST_MAX, ASSIST_CORRECTION_SLEW, ASSIST_ALWAYS_ACTIVE,
-                ASSIST_THROTTLE_MIN, YAW_SIGN, ASSIST_DT,
+                ASSIST_THROTTLE_MIN, YAW_SIGN, CONTROL_PERIOD_MS / 1000.0,
             )
+        assist_clock = StopWatch()
 
         while True:
             if Button.B in controller.buttons.pressed():
@@ -270,7 +276,9 @@ async def main():
 
             # Fold yaw-rate drift assist into the steering target.
             if assist is not None:
-                target, _ = assist.step(target, hub.imu.heading(), throttle)
+                target, _ = assist.step(
+                    target, hub.imu.heading(), throttle, assist_clock.time()
+                )
                 if target < negative_limit:
                     target = negative_limit
                 elif target > positive_limit:

@@ -191,9 +191,11 @@ enabled or disabled independently with
 `hub.imu.heading()` returns a continuous (unwrapped) heading in degrees,
 clockwise positive, resolved about the vertical axis automatically from
 gravity, so the Hub mounting orientation does not matter as long as one face
-stays up. Yaw rate is derived from consecutive heading samples. `YAW_SIGN`
-maps clockwise-positive sensor rotation onto the steering motor's positive
-direction.
+stays up. Yaw rate is derived from consecutive heading samples using the
+measured time between them, rather than assuming every control frame is exactly
+20 ms; this prevents UART-write time from inflating the calculated rate.
+`YAW_SIGN` maps clockwise-positive sensor rotation onto the steering motor's
+positive direction.
 
 The controller converts same-direction driver steering into a desired yaw rate:
 
@@ -244,13 +246,13 @@ Defaults:
 | --- | --- | --- | --- |
 | `ENABLE_GYRO_ASSIST` | `True` | `True` | Master switch |
 | `ASSIST_ALWAYS_ACTIVE` | `True` | `False` | Bypass the forward-throttle gate |
-| `ASSIST_GAIN` | `0.35` | `0.10` | deg steering / (deg/s yaw-rate error) |
+| `ASSIST_GAIN` | `0.55` | `0.10` | deg steering / (deg/s yaw-rate error) |
 | `ASSIST_YAW_RATE_PER_STEER` | `3.0` | `3.0` | requested deg/s yaw per deg of same-direction driver steering |
 | `ASSIST_DRIFT_ENTRY_YAW_RATE` | `20` | `20` | yaw rate that enables slide-hold when counter-steering |
-| `ASSIST_DRIFT_YAW_RATE` | `120` | `120` | yaw rate held while counter-steering an established slide |
+| `ASSIST_DRIFT_YAW_RATE` | `180` | `120` | yaw rate held while counter-steering an established slide |
 | `ASSIST_YAW_RATE_DEADBAND` | `2` | `8` | ignored excess yaw rate in deg/s |
 | `ASSIST_FILTER_ALPHA` | `0.65` | `0.25` | yaw-rate low-pass coefficient; lower is smoother |
-| `ASSIST_MAX` | `35` | `12` | maximum correction in deg |
+| `ASSIST_MAX` | `40` | `12` | maximum correction in deg |
 | `ASSIST_CORRECTION_SLEW` | `5` | `24` | maximum correction change per 20 ms frame |
 | `ASSIST_THROTTLE_MIN` | `5` | `5` | gate threshold when always-active mode is off |
 | `YAW_SIGN` | `1` | `1` | flip to `-1` if the correction fights the car |
@@ -263,9 +265,11 @@ or lower it if the steering oscillates. Increase `ASSIST_YAW_RATE_PER_STEER` to
 make turn-in more assertive. Raise `ASSIST_DRIFT_YAW_RATE` for longer, faster
 slides, or lower it to make the car recover sooner. Reduce `ASSIST_MAX` if
 corrections are too abrupt, or reduce `ASSIST_FILTER_ALPHA` if the steering
-chatters. The production profile uses moderate gain and 35-degree authority
-with a 2 deg/s deadband, input filtering, and a 5-degree-per-frame output slew
-limit to suppress rapid full-left/full-right oscillation.
+chatters. The production profile is tuned to actively reduce a roughly
+45-degree physical counter-steer when yaw drops below the 180 deg/s drift
+target: it uses 0.55 gain and up to 40 degrees of correction, with a 2 deg/s
+deadband, input filtering, and a 5-degree-per-frame output slew limit to
+suppress rapid full-left/full-right oscillation.
 
 The pure control law is `DriftAssist` in both Hub programs and is mirrored by
 `test/test_assist.py` (run with `./test/run-python-tests.sh`).
