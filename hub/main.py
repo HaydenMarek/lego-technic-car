@@ -2,7 +2,7 @@
 
 from pybricks.hubs import TechnicHub
 from pybricks.iodevices import UARTDevice, XboxController
-from pybricks.parameters import Button, Port, Stop
+from pybricks.parameters import Button, Color, Port, Stop
 from pybricks.pupdevices import Motor
 from pybricks.tools import run_task, wait
 
@@ -14,6 +14,10 @@ UART_BAUD = 9600
 # so this loop is fire-and-forget; read_all() only drains stray bytes.
 CONTROL_PERIOD_MS = 20
 ARM_TRIGGER_MAX = 2
+# The limited mode caps the command sent to the Arduino before its throttle
+# response curve is applied. Full mode retains the normal -100..100 range.
+LIMITED_DRIVE_MAX = 80
+FULL_DRIVE_MAX = 100
 
 # Reverse both drive motors together to match their physical mounting.
 # Set to 1 if the drivetrain is later rewired in the opposite orientation.
@@ -63,8 +67,8 @@ STEERING_CURVE_EXPONENT = 2
 # steering-to-yaw relationship is inverted, so reverse handling must be tested
 # carefully.
 
-ENABLE_GYRO_ASSIST = False
-ASSIST_ALWAYS_ACTIVE = False
+ENABLE_GYRO_ASSIST = True
+ASSIST_ALWAYS_ACTIVE = True
 
 # Degrees of steering correction per deg/s of excess yaw rate.
 ASSIST_GAIN = 1.75
@@ -292,6 +296,16 @@ def steering_target(joystick, negative_limit, positive_limit):
     return positive_limit * directed // 100
 
 
+def limit_throttle(throttle, maximum):
+    """Clamp a signed drive command to the active mode's safe range."""
+
+    if throttle > maximum:
+        return maximum
+    if throttle < -maximum:
+        return -maximum
+    return throttle
+
+
 async def wait_for_arm(negative_limit, positive_limit, assist):
     """Keep drive stopped until A is newly pressed with neutral triggers."""
 
@@ -377,10 +391,35 @@ async def main():
         if not await wait_for_arm(negative_limit, positive_limit, assist):
             return
 
+        # A successful arm starts at the lower command limit. The status light
+        # makes the current mode visible without looking at the controller.
+        drive_maximum = LIMITED_DRIVE_MAX
+        hub.light.on(Color.BLUE)
+        b_was_pressed = Button.B in controller.buttons.pressed()
+        boost_was_pressed = (
+            Button.LB in controller.buttons.pressed()
+            and Button.RB in controller.buttons.pressed()
+        )
+
         while True:
-            # Press B to stop the vehicle and end the program.
-            if Button.B in controller.buttons.pressed():
+            buttons = controller.buttons.pressed()
+            b_pressed = Button.B in buttons
+            boost_pressed = Button.LB in buttons and Button.RB in buttons
+            b_newly_pressed = b_pressed and not b_was_pressed
+            boost_newly_pressed = boost_pressed and not boost_was_pressed
+
+            if drive_maximum == FULL_DRIVE_MAX:
+                # The first B press after boosting drops back to the safer
+                # limited mode. Releasing and pressing B again then exits.
+                if b_newly_pressed:
+                    drive_maximum = LIMITED_DRIVE_MAX
+                    hub.light.on(Color.BLUE)
+            elif b_newly_pressed:
+                # B in limited mode is the stop-and-exit control.
                 break
+            elif boost_newly_pressed:
+                drive_maximum = FULL_DRIVE_MAX
+                hub.light.on(Color.RED)
 
             left_trigger, right_trigger = controller.triggers()
             steering, _ = controller.joystick_left()
@@ -388,7 +427,8 @@ async def main():
             # Right trigger drives forward; left trigger drives backward.
             # DRIVE_DIRECTION maps that intent to the mounted motor direction.
             drive_intent = int(right_trigger - left_trigger)
-            throttle = drive_intent * DRIVE_DIRECTION
+            throttle = limit_throttle(drive_intent, drive_maximum)
+            throttle *= DRIVE_DIRECTION
             steering = int(steering)
 
             # Steering is owned entirely by the Technic Hub and constrained to
@@ -420,6 +460,9 @@ async def main():
             # Drive ACKs are suppressed; drain any stray bytes so the
             # UART receive buffer cannot fill.
             uart.read_all()
+
+            b_was_pressed = b_pressed
+            boost_was_pressed = boost_pressed
 
     finally:
         # Center the steering and attempt an orderly drive stop. The Arduino

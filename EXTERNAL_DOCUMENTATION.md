@@ -5,7 +5,12 @@
   half-duplex). Used to send `D,<throttle>` commands and the `MODE` handshake.
 
 - https://docs.pybricks.com/en/v4.0.0/hubs/technic_hub.html
-  TechnicHub built-in functions, including `hub.imu`.
+  TechnicHub built-in functions, including `hub.imu` and the status light used
+  to show blue limited-power and red full-power drive modes.
+
+- https://docs.pybricks.com/en/v4.0.0/iodevices/xboxcontroller.html
+  XboxController API. Its `buttons.pressed()` result includes `Button.LB` and
+  `Button.RB`, used together to switch from limited to full-power mode.
 
 - https://docs.pybricks.com/en/v4.0.0/robotics/imu.html
   Built-in IMU used by the gyro steering assist. `hub.imu.heading()` returns a

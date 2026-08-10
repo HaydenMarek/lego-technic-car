@@ -125,8 +125,14 @@ pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
 ```
 
 The Hub program requires `MODE,BTS7960`, successful steering calibration,
-neutral triggers, and a new A-button press before it sends throttle. Xbox B
-stops and ends the program.
+neutral triggers, and a new A-button press before it sends throttle. Arming
+starts in limited-power mode: the Hub caps its `D,<throttle>` command at 70 and
+shows blue on its status light. Press both Xbox bumpers (`LB` + `RB`) to enable
+the normal 100-command range and change the light to red. In full-power mode,
+the first new Xbox B press returns to limited-power/blue; a later new B press
+from limited-power mode stops and ends the program. Because the Arduino applies
+its quadratic throttle curve after the command is received, a 70 command is a
+49% motor-output target with the default curve.
 
 Both Hub programs map Xbox triggers to throttle, control the Powered Up
 steering motor directly from the left joystick, and send only `D,<throttle>`
@@ -140,8 +146,10 @@ Defaults:
 - Steering travel: measured automatically at startup
 - Steering response: quadratic curve (`STEERING_CURVE_EXPONENT = 2`),
   less sensitive near center, full lock at full stick
-- Xbox A button: arm production drive after calibration
-- Xbox B button: stop and end the program
+- Xbox A button: arm production drive at the 70-command limit (blue Hub light)
+- Xbox LB + RB: switch production drive to its 100-command limit (red light)
+- Xbox B button: full to limited mode on its first press; stop and end on a
+  subsequent press in limited mode
 - Gyro steering assist: rate-only RC drift stabilization on the Hub (enabled)
 - Production current protection: enabled
 - Production dynamic braking: disabled
@@ -165,7 +173,8 @@ steering input calls for, rather than trying to preserve a compass direction.
 Once the rotation settles, correction returns to zero at the car's new
 heading; it never steers back toward an old heading. The assist runs entirely
 on the Hub, so the Arduino throttle/UART path is unchanged and steering remains
-owned by the Hub. It is enabled with `ENABLE_GYRO_ASSIST` in both Hub programs.
+owned by the Hub. It is enabled or disabled independently with
+`ENABLE_GYRO_ASSIST` in each Hub program; both current Hub programs enable it.
 
 `hub.imu.heading()` returns a continuous (unwrapped) heading in degrees,
 clockwise positive, resolved about the vertical axis automatically from
