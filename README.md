@@ -133,6 +133,14 @@ the first new Xbox B press returns to limited-power/blue; a later new B press
 from limited-power mode stops and ends the program. The Arduino's active linear
 throttle curve preserves the 75 command as a 75% motor-output target.
 
+Production drive also compensates for the measured low-speed drivetrain dead
+zone without wasting trigger travel. Net trigger intent from `-2` through `2`
+remains neutral. The rest of the signed `-100..100` trigger range is remapped
+linearly: an intent of `3` commands the observed `-10` or `10` launch threshold,
+and full trigger commands the active 75 or 100 power-mode maximum. Intermediate
+trigger positions are distributed across that usable range before
+drive-direction mapping is applied.
+
 Both Hub programs map Xbox triggers to throttle, control the Powered Up
 steering motor directly from the left joystick, and send only `D,<throttle>`
 to the Arduino.
@@ -149,6 +157,9 @@ Defaults:
 - Xbox LB + RB: switch production drive to its 100-command limit (red light)
 - Xbox B button: full to limited mode on its first press; stop and end on a
   subsequent press in limited mode
+- Production launch compensation: `-2..2` stays neutral; all remaining trigger
+  travel is remapped from the measured ±10 launch threshold to the active
+  75-command or 100-command power-mode maximum
 - Gyro steering assist: rate-only RC drift stabilization on the Hub (enabled)
 - Production current protection: enabled
 - Production dynamic braking: disabled

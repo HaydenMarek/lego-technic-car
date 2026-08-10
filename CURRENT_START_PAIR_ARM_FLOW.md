@@ -33,14 +33,14 @@ flowchart TD
     armCheck -- no --> unarmedLoop
     armCheck -- yes --> limitedArmed["ARMED: LIMITED-POWER MODE<br/>Maximum drive command is 75%<br/>Set Technic Hub light blue"]
 
-    limitedArmed --> limitedLoop["Every 20 ms:<br/>- Limit throttle to 75%<br/>- B exits<br/>- Read triggers and steering<br/>- Track steering target, with optional assist<br/>- Send D,throttle<br/>- Drain UART"]
+    limitedArmed --> limitedLoop["Every 20 ms:<br/>- Keep net trigger -2..2 neutral<br/>- Remap 3..100% intent onto 10..75% drive<br/>- B exits<br/>- Read triggers and steering<br/>- Track steering target, with optional assist<br/>- Send D,throttle<br/>- Drain UART"]
     limitedLoop --> bLimited{"B pressed?"}
     bLimited -- yes --> shutdown
     bLimited -- no --> fullPowerCheck{"LB and RB<br/>pressed together?"}
     fullPowerCheck -- no --> limitedLoop
     fullPowerCheck -- yes --> fullArmed["ARMED: FULL-POWER MODE<br/>Maximum drive command is 100%<br/>Set Technic Hub light red"]
 
-    fullArmed --> fullLoop["Every 20 ms:<br/>- Read triggers and steering<br/>- Track steering target, with optional assist<br/>- Send D,throttle<br/>- Drain UART"]
+    fullArmed --> fullLoop["Every 20 ms:<br/>- Keep net trigger -2..2 neutral<br/>- Remap 3..100% intent onto 10..100% drive<br/>- Read triggers and steering<br/>- Track steering target, with optional assist<br/>- Send D,throttle<br/>- Drain UART"]
     fullLoop --> bFull{"B pressed?"}
     bFull -- no --> fullLoop
     bFull -- yes --> limitedArmed
@@ -89,6 +89,10 @@ Notes:
   changes the Technic Hub light to red. Pressing `B` once from full-power mode
   returns to limited-power mode and changes the Hub light back to blue. A
   further `B` press while in limited-power mode stops the car and exits.
+- Production trigger compensation keeps net intent `-2..2` at zero. Each
+  remaining trigger position is remapped across the usable range: `-3` and `3`
+  become the measured `-10` and `10` launch commands, while full trigger
+  reaches the active 75-command or 100-command mode maximum.
 - On an Arduino reset or broken UART link, the Arduino watchdog prevents
   ongoing drive after 500 ms. It starts in the stopped state.
 - The physical emergency/motor-power switch is outside the software flow.

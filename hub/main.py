@@ -18,6 +18,12 @@ ARM_TRIGGER_MAX = 2
 # response curve is applied. Full mode retains the normal -100..100 range.
 LIMITED_DRIVE_MAX = 75
 FULL_DRIVE_MAX = 100
+# The unloaded and loaded drivetrain both need about 10% PWM to overcome
+# static friction. Keep the arming-neutral range at zero, then remap all
+# remaining trigger travel from this measured launch threshold to the active
+# power-mode maximum.
+DRIVE_NEUTRAL_DEADBAND = ARM_TRIGGER_MAX
+DRIVE_LAUNCH_MINIMUM = 10
 
 # Reverse both drive motors together to match their physical mounting.
 # Set to 1 if the drivetrain is later rewired in the opposite orientation.
@@ -305,14 +311,22 @@ def steering_target(joystick, negative_limit, positive_limit):
     return positive_limit * directed // 100
 
 
-def limit_throttle(throttle, maximum):
-    """Clamp a signed drive command to the active mode's safe range."""
+def map_drive_intent(intent, maximum):
+    """Map intentional trigger travel onto the usable drive-command range."""
 
-    if throttle > maximum:
-        return maximum
-    if throttle < -maximum:
-        return -maximum
-    return throttle
+    magnitude = -intent if intent < 0 else intent
+    if magnitude <= DRIVE_NEUTRAL_DEADBAND:
+        return 0
+
+    # At the first intentional value above the neutral deadband, command the
+    # measured launch minimum. At full trigger, command the active mode's
+    # maximum. Integer math keeps the Hub protocol's integer throttle values.
+    mapped = DRIVE_LAUNCH_MINIMUM + (
+        (magnitude - DRIVE_NEUTRAL_DEADBAND)
+        * (maximum - DRIVE_LAUNCH_MINIMUM)
+        // (100 - DRIVE_NEUTRAL_DEADBAND)
+    )
+    return -mapped if intent < 0 else mapped
 
 
 async def wait_for_arm(negative_limit, positive_limit, assist):
@@ -437,7 +451,7 @@ async def main():
             # Right trigger drives forward; left trigger drives backward.
             # DRIVE_DIRECTION maps that intent to the mounted motor direction.
             drive_intent = int(right_trigger - left_trigger)
-            throttle = limit_throttle(drive_intent, drive_maximum)
+            throttle = map_drive_intent(drive_intent, drive_maximum)
             throttle *= DRIVE_DIRECTION
             steering = int(steering)
 
