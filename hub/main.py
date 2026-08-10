@@ -79,22 +79,20 @@ ENABLE_GYRO_ASSIST = True
 ASSIST_ALWAYS_ACTIVE = True
 
 # Degrees of steering correction per deg/s of yaw-rate error.
-ASSIST_GAIN = 0.55
+ASSIST_GAIN = 0.75
 # Requested yaw rate per degree of same-direction driver steering target.
 ASSIST_YAW_RATE_PER_STEER = 3.0
 # Once the driver counter-steers against this much yaw, hold the slide at this
 # yaw rate rather than commanding a turn in the counter-steer's direction.
 ASSIST_DRIFT_ENTRY_YAW_RATE = 20
-ASSIST_DRIFT_YAW_RATE = 180
+ASSIST_DRIFT_YAW_RATE = 220
 # Ignore small excess rates to prevent steering chatter from gyro noise.
 ASSIST_YAW_RATE_DEADBAND = 2
 # Low-pass coefficient for yaw rate (0..1). Lower is smoother but reacts later.
-ASSIST_FILTER_ALPHA = 0.65
-# Maximum corrective offset in degrees either way.
-ASSIST_MAX = 40
-# Maximum correction change per 20 ms control frame. This limits the command
-# slew to 250 deg/s and prevents instant full-left/full-right reversals.
-ASSIST_CORRECTION_SLEW = 5
+ASSIST_FILTER_ALPHA = 0.80
+# Production derives correction authority and its per-frame slew from the
+# calibrated end stops. A hard yaw event can therefore use the whole safe
+# steering range, including mechanisms whose motor travel is not 45 degrees.
 # Fallback gate used only when ASSIST_ALWAYS_ACTIVE is False.
 ASSIST_THROTTLE_MIN = 5
 # Flip to -1 if the correction reinforces a slide instead of counter-steering.
@@ -406,11 +404,12 @@ async def main():
                 if hub.imu.ready():
                     break
                 await wait(CONTROL_PERIOD_MS)
+            assist_range = max(-negative_limit, positive_limit)
             assist = DriftAssist(
                 ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
                 ASSIST_DRIFT_ENTRY_YAW_RATE, ASSIST_DRIFT_YAW_RATE,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
-                ASSIST_MAX, ASSIST_CORRECTION_SLEW, ASSIST_ALWAYS_ACTIVE,
+                assist_range, assist_range, ASSIST_ALWAYS_ACTIVE,
                 ASSIST_THROTTLE_MIN, YAW_SIGN, CONTROL_PERIOD_MS / 1000.0,
             )
         assist_clock = StopWatch()

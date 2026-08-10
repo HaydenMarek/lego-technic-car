@@ -246,14 +246,14 @@ Defaults:
 | --- | --- | --- | --- |
 | `ENABLE_GYRO_ASSIST` | `True` | `True` | Master switch |
 | `ASSIST_ALWAYS_ACTIVE` | `True` | `False` | Bypass the forward-throttle gate |
-| `ASSIST_GAIN` | `0.55` | `0.10` | deg steering / (deg/s yaw-rate error) |
+| `ASSIST_GAIN` | `0.75` | `0.10` | deg steering / (deg/s yaw-rate error) |
 | `ASSIST_YAW_RATE_PER_STEER` | `3.0` | `3.0` | requested deg/s yaw per deg of same-direction driver steering |
 | `ASSIST_DRIFT_ENTRY_YAW_RATE` | `20` | `20` | yaw rate that enables slide-hold when counter-steering |
-| `ASSIST_DRIFT_YAW_RATE` | `180` | `120` | yaw rate held while counter-steering an established slide |
+| `ASSIST_DRIFT_YAW_RATE` | `220` | `120` | yaw rate held while counter-steering an established slide |
 | `ASSIST_YAW_RATE_DEADBAND` | `2` | `8` | ignored excess yaw rate in deg/s |
-| `ASSIST_FILTER_ALPHA` | `0.65` | `0.25` | yaw-rate low-pass coefficient; lower is smoother |
-| `ASSIST_MAX` | `40` | `12` | maximum correction in deg |
-| `ASSIST_CORRECTION_SLEW` | `5` | `24` | maximum correction change per 20 ms frame |
+| `ASSIST_FILTER_ALPHA` | `0.80` | `0.25` | yaw-rate low-pass coefficient; lower is smoother |
+| `ASSIST_MAX` | calibrated steering range | `12` | maximum correction in deg |
+| `ASSIST_CORRECTION_SLEW` | calibrated steering range | `24` | maximum correction change per 20 ms frame |
 | `ASSIST_THROTTLE_MIN` | `5` | `5` | gate threshold when always-active mode is off |
 | `YAW_SIGN` | `1` | `1` | flip to `-1` if the correction fights the car |
 
@@ -263,13 +263,13 @@ the wheels should steer counterclockwise. Flip `YAW_SIGN` if they steer with
 the rotation. Tune `ASSIST_GAIN` first: raise it for stronger yaw-rate tracking
 or lower it if the steering oscillates. Increase `ASSIST_YAW_RATE_PER_STEER` to
 make turn-in more assertive. Raise `ASSIST_DRIFT_YAW_RATE` for longer, faster
-slides, or lower it to make the car recover sooner. Reduce `ASSIST_MAX` if
+slides, or lower it to make the car recover sooner. Reduce `ASSIST_GAIN` if
 corrections are too abrupt, or reduce `ASSIST_FILTER_ALPHA` if the steering
-chatters. The production profile is tuned to actively reduce a roughly
-45-degree physical counter-steer when yaw drops below the 180 deg/s drift
-target: it uses 0.55 gain and up to 40 degrees of correction, with a 2 deg/s
-deadband, input filtering, and a 5-degree-per-frame output slew limit to
-suppress rapid full-left/full-right oscillation.
+chatters. The production profile derives both `ASSIST_MAX` and
+`ASSIST_CORRECTION_SLEW` from the calibrated mechanical limits. A hard yaw
+event can therefore request full safe left/right steering travel in its first
+sampled frame; `track_target()` then moves the steering motor as fast as its
+motor controller allows.
 
 The pure control law is `DriftAssist` in both Hub programs and is mirrored by
 `test/test_assist.py` (run with `./test/run-python-tests.sh`).

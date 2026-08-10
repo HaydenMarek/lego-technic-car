@@ -23,6 +23,12 @@
   (`heading_rotations * 360 + heading_projection`), so it is NOT wrapped to
   0..360; the assist wraps the heading error to [-180, 180] itself.
 
+- https://docs.pybricks.com/en/v4.0.0/pupdevices/motor.html
+  Powered Up `Motor.track_target()` and controller-limit reference. The gyro
+  assist continuously calls `track_target()` because it skips normal smooth
+  acceleration and drives a changing steering target as fast as the motor
+  controller permits.
+
 - https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf
   Official BTS7960 half-bridge datasheet. Covers electrical limits,
   current-sense diagnostics, and PWM operation up to 25 kHz; useful when
