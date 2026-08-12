@@ -126,10 +126,12 @@ def main() -> int:
             "STEERING_CURVE_EXPONENT": "2",
             "ENABLE_GYRO_ASSIST": "True",
             "ASSIST_ALWAYS_ACTIVE": "True",
-            "ASSIST_GAIN": "0.75",
-            "ASSIST_DRIFT_YAW_RATE": "220",
+            "ASSIST_GAIN": "0.60",
+            "ASSIST_DRIFT_YAW_RATE": "180",
             "ASSIST_YAW_RATE_DEADBAND": "2",
-            "ASSIST_FILTER_ALPHA": "0.80",
+            "ASSIST_FILTER_ALPHA": "0.65",
+            "ASSIST_MAX": "40",
+            "ASSIST_CORRECTION_SLEW": "5",
         },
     )
     require_values(
@@ -144,6 +146,8 @@ def main() -> int:
             "ASSIST_DRIFT_YAW_RATE": "120",
             "ASSIST_YAW_RATE_DEADBAND": "8",
             "ASSIST_FILTER_ALPHA": "0.25",
+            "ASSIST_MAX": "12",
+            "ASSIST_CORRECTION_SLEW": "24",
         },
     )
 
