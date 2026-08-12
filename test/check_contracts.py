@@ -95,16 +95,15 @@ def main() -> int:
         },
     )
 
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    configuration = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
     for text in (
-        "Production drive direction: reversed on the Hub (`DRIVE_DIRECTION = -1`)",
-        "Gyro steering assist: rate-only RC drift stabilization on the Hub (enabled)",
-        "| `ENABLE_GYRO_ASSIST` | `True` | `True` | Master switch |",
-        "| `ASSIST_ALWAYS_ACTIVE` | `True` | `False` |",
-        "The active value is `1`:",
+        "| Drive direction | -1 | 1 |",
+        "| Gyro assist enabled | `True` | `True` |",
+        "| Assist always active | `True` | `False` |",
+        "| Throttle-curve exponent | 1 (linear) | 1 (linear) |",
     ):
-        if text not in readme:
-            fail(f"README must contain approved profile statement: {text!r}")
+        if text not in configuration:
+            fail(f"configuration document must contain approved profile statement: {text!r}")
 
     print("Profile and specification contract checks passed")
     return 0

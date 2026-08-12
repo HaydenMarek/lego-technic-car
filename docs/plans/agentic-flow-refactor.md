@@ -7,9 +7,8 @@ the project documentation and agent workflow. The goal is to keep the written
 specification, production configuration, tests, hardware state, and GitHub
 workflow aligned without relying on conversational memory.
 
-This is a tracking document, not a replacement for `README.md`. Until the
-documentation structure is deliberately changed, `README.md` remains the
-normative project specification as defined by `AGENTS.md`.
+This is a tracking document, not a specification. The repository README links
+to the normative protocol, configuration, and hardware documents.
 
 ## Progress tracker
 
@@ -22,7 +21,7 @@ normative project specification as defined by `AGENTS.md`.
 | 5 | Clarify the hardware current-protection safety wording | High | [#5](https://github.com/HaydenMarek/lego-technic-car/issues/5) | Not started |
 | 6 | Add lifecycle metadata and organization for implementation plans | Medium | [#6](https://github.com/HaydenMarek/lego-technic-car/issues/6) | Not started |
 | 7 | Repair and strengthen external-documentation references | Medium | [#7](https://github.com/HaydenMarek/lego-technic-car/issues/7) | Not started |
-| 8 | Split the monolithic README into focused documentation | Medium | [#8](https://github.com/HaydenMarek/lego-technic-car/issues/8) | Not started |
+| 8 | Split the monolithic README into focused documentation | Medium | [#8](https://github.com/HaydenMarek/lego-technic-car/issues/8) | Completed; documentation split into README and `docs/` |
 | 9 | Add one verification command and continuous integration | High | [#9](https://github.com/HaydenMarek/lego-technic-car/issues/9) | Not started |
 
 ## Shared issue template

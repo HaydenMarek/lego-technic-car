@@ -1,5 +1,9 @@
 # Current start, pairing, and arming flow
 
+**Status: descriptive.** This is a behavior map of the current implementation,
+not an independent specification. The normative documents are linked from the
+repository [`README.md`](README.md).
+
 This is a behavior map of the current firmware, not a proposal. Edit the
 Mermaid source below (node labels and arrows) or add notes in the **Requested
 changes** section. I can then implement the revised flow.
