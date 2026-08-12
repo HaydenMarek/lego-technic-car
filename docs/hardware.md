@@ -4,10 +4,13 @@
 hardware revision, wiring, measurement-based protection settings, and safety.
 
 > [!WARNING]
-> No fuse, independent current-protection circuit, or automatic hardware cutoff
-> is installed. Firmware foldback and emergency coast are not substitutes for
-> independent protection and cannot cover an Arduino crash, wiring fault,
-> incorrect calibration, or power-stage failure.
+> The documented vehicle configuration has **no independent system-level
+> hardware current protection**: no externally rated fuse, independent
+> protection circuit, or automatic vehicle-level motor-power cutoff is
+> installed. The BTS7960 driver IC has integrated device-level protections;
+> they do not replace independent vehicle protection. Firmware foldback,
+> emergency coast, and the driver IC cannot cover every Arduino crash, wiring
+> fault, incorrect calibration, or power-stage failure.
 
 ## Hardware revision
 
@@ -72,6 +75,14 @@ is nonzero. [Protocol failsafe](protocol.md#failsafe) defines foldback and the
 emergency latch. Adjust thresholds only after repeatable loaded data and retain
 margin below locked-rotor current.
 
+The BTS7960 IC datasheet describes integrated overcurrent, short-circuit,
+overtemperature, overvoltage, and undervoltage protections. These are
+device-level features, not independently rated vehicle protection: this
+documented build has no external fuse, independent current-protection circuit,
+or automatic motor-power cutoff. The IC datasheet also does not establish the
+protection behavior of a particular IBT-2 clone board or the vehicle wiring.
+Independent vehicle-level protection is tracked in [issue #11](https://github.com/HaydenMarek/lego-technic-car/issues/11); do not select a fuse rating or cutoff design without measurements and owner approval.
+
 ## Power safety
 
 - A 2S pack is about 7.4 V nominal and 8.4 V fully charged.
@@ -81,7 +92,9 @@ margin below locked-rotor current.
 - Power Arduino and Hub/controller logic before motor power; disconnect motor
   power first when shutting down.
 - Battery monitoring, low-voltage cutoff, temperature sensing, precision current
-  calibration, and independent hardware current protection are not implemented.
+  calibration, and independent system-level hardware current protection are not
+  implemented. The BTS7960 IC's integrated device-level protections remain
+  present but do not close those vehicle-level gaps.
 
 Production uses `DRIVE_DIRECTION = -1` for the installed orientation. Change
 direction only while powered down and retain opposite-polarity motor wiring.

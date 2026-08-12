@@ -7,10 +7,13 @@ driver. The two side-by-side buggy motors share the bridge with opposite
 polarity, so they spin in opposite directions.
 
 > [!WARNING]
-> This revision has **no independent hardware current protection**: no fuse,
-> hardware current-protection circuit, or automatic hardware cutoff. Firmware
-> foldback cannot protect against an Arduino crash, wiring fault, incorrect
-> calibration, or power-stage failure. Read [hardware safety](docs/hardware.md#power-safety)
+> This documented vehicle revision has **no independent system-level hardware
+> current protection**: no externally rated fuse, independent protection
+> circuit, or automatic vehicle-level motor-power cutoff. The BTS7960 driver IC
+> has integrated device-level protections, but they are not a substitute for
+> independent vehicle protection. Firmware foldback and the driver IC cannot
+> protect against every Arduino crash, wiring fault, incorrect calibration, or
+> power-stage failure. Read [hardware safety](docs/hardware.md#power-safety)
 > before applying motor power.
 
 ## Start here

@@ -157,6 +157,22 @@ def main() -> int:
         if text not in configuration:
             fail(f"configuration document must contain approved profile statement: {text!r}")
 
+    safety_texts = {
+        "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
+        "docs/hardware.md": (ROOT / "docs" / "hardware.md").read_text(
+            encoding="utf-8"
+        ),
+    }
+    for name, text in safety_texts.items():
+        normalized = " ".join(text.replace("*", "").replace(">", "").split())
+        for required in (
+            "independent system-level hardware current protection",
+            "BTS7960 driver IC",
+            "device-level protections",
+        ):
+            if required not in normalized:
+                fail(f"{name} must distinguish IC and vehicle protection: {required!r}")
+
     verify_temporary_mismatch_is_detected()
     print("Profile and specification contract checks passed")
     return 0
