@@ -1,6 +1,6 @@
 # LEGO Technic RC Vehicle Controller
 
-<img width="1064" height="946" alt="LEGO Technic RC vehicle" src="https://github.com/user-attachments/assets/2fb63b13-2841-4893-8354-1d628950cbb6" />
+![LEGO Technic RC vehicle](archive/technic-rc-car.png)
 
 Firmware for an Arduino UNO between a LEGO Technic Hub and one BTS7960 motor
 driver. The two side-by-side buggy motors share the bridge with opposite

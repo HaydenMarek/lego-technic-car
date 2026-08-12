@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)")
+HTTP_URL = re.compile(r"https?://[^\s<>\])\"']+")
 
 
 def fail(message: str) -> None:
@@ -22,7 +23,7 @@ def fail(message: str) -> None:
 
 def targets(path: Path) -> set[str]:
     text = path.read_text(encoding="utf-8")
-    return set(MARKDOWN_LINK.findall(text))
+    return set(MARKDOWN_LINK.findall(text)) | set(HTTP_URL.findall(text))
 
 
 def check_local(source: Path, target: str) -> None:
@@ -46,16 +47,16 @@ def check_remote(url: str) -> None:
         # Some documentation hosts reject HEAD even though their public GET
         # endpoint works, so verify with GET before reporting a broken link.
         pass
-    except urllib.error.URLError as error:
-        fail(f"{url}: {error.reason}")
+    except (urllib.error.URLError, OSError) as error:
+        fail(f"{url}: {error}")
 
     try:
         with urllib.request.urlopen(url, timeout=20):
             return
     except urllib.error.HTTPError as error:
         fail(f"{url}: HTTP {error.code}")
-    except urllib.error.URLError as error:
-        fail(f"{url}: {error.reason}")
+    except (urllib.error.URLError, OSError) as error:
+        fail(f"{url}: {error}")
 
 
 def main() -> int:

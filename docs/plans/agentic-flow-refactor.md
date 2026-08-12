@@ -20,7 +20,7 @@ to the normative protocol, configuration, and hardware documents.
 | 4 | Add explicit agent safety boundaries for physical hardware operations | High | [#4](https://github.com/HaydenMarek/lego-technic-car/issues/4) | Not started |
 | 5 | Clarify the hardware current-protection safety wording | High | [#5](https://github.com/HaydenMarek/lego-technic-car/issues/5) | Not started |
 | 6 | Add lifecycle metadata and organization for implementation plans | Medium | [#6](https://github.com/HaydenMarek/lego-technic-car/issues/6) | Not started |
-| 7 | Repair and strengthen external-documentation references | Medium | [#7](https://github.com/HaydenMarek/lego-technic-car/issues/7) | Not started |
+| 7 | Repair and strengthen external-documentation references | Medium | [#7](https://github.com/HaydenMarek/lego-technic-car/issues/7) | Completed 2026-08-12; primary references are descriptive, pinned where source behavior is cited, and CI verifies external URLs. |
 | 8 | Split the monolithic README into focused documentation | Medium | [#8](https://github.com/HaydenMarek/lego-technic-car/issues/8) | Completed; documentation split into README and `docs/` |
 | 9 | Add one verification command and continuous integration | High | [#9](https://github.com/HaydenMarek/lego-technic-car/issues/9) | Not started |
 
