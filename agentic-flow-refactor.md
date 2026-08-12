@@ -16,8 +16,8 @@ normative project specification as defined by `AGENTS.md`.
 | # | Work item | Priority | GitHub issue | Status |
 | ---: | --- | --- | --- | --- |
 | 1 | Reconcile documented and production defaults | High | [#1](https://github.com/HaydenMarek/lego-technic-car/issues/1) | Current code values documented; profile contract tests remain in #2 |
-| 2 | Add contract tests for production profiles and shared control logic | High | [#2](https://github.com/HaydenMarek/lego-technic-car/issues/2) | Not started |
-| 3 | Replace the conversational documentation trigger with a definition of done | High | [#3](https://github.com/HaydenMarek/lego-technic-car/issues/3) | Not started |
+| 2 | Add contract tests for production profiles and shared control logic | High | [#2](https://github.com/HaydenMarek/lego-technic-car/issues/2) | Completed in `54ffb26`; issue status still needs reconciliation |
+| 3 | Replace the conversational documentation trigger with a definition of done | High | [#3](https://github.com/HaydenMarek/lego-technic-car/issues/3) | Completed and closed 2026-08-12 |
 | 4 | Add explicit agent safety boundaries for physical hardware operations | High | [#4](https://github.com/HaydenMarek/lego-technic-car/issues/4) | Not started |
 | 5 | Clarify the hardware current-protection safety wording | High | [#5](https://github.com/HaydenMarek/lego-technic-car/issues/5) | Not started |
 | 6 | Add lifecycle metadata and organization for implementation plans | Medium | [#6](https://github.com/HaydenMarek/lego-technic-car/issues/6) | Not started |

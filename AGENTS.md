@@ -9,11 +9,31 @@ being implemented matches what `README.md` describes. If the implementation
 diverges from the specification in `README.md`, reconcile the two before
 finishing the change.
 
-When told "good job", review the whole conversation held with the agent and
-update `README.md` if the user steered the implementation of a new feature
-(added constraints, changed behavior, or made decisions that differ from what
-the README previously documented). Bring `README.md` back in sync with what was
-actually built.
+## Definition of done
+
+Documentation synchronization is part of completing every behavior or
+configuration change; it is not triggered by a conversational phrase. Before
+finishing such work, update the relevant normative documentation, normally
+`README.md`, for every approved behavior, constraint, or configuration decision
+implemented during the task. Update or add focused tests when the change can be
+validated in software.
+
+Do not silently choose between a requested behavior, `README.md`, and the
+implementation when they conflict. Treat an explicit user request as the
+decision to implement, then update the implementation and normative
+documentation together. If no approved decision resolves an unexpected
+README/code conflict, stop and ask the owner which is authoritative before
+changing either one.
+
+Before handoff, run the relevant validation. Use `./test/verify.sh` for a
+repository-wide non-hardware completion check when its toolchain is available;
+otherwise run the focused checks and state why the full check was not run. The
+handoff must clearly separate host-side, build, or simulated results from any
+real-hardware validation, and must identify hardware behavior that remains
+unverified.
+
+When completing tracked work, update its tracking document and GitHub issue so
+their status matches the completed acceptance criteria.
 
 ## External documentation
 

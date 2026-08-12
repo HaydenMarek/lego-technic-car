@@ -508,9 +508,9 @@ void dynamicBrakingEngagesAtNeutralButNotAfterStop() {
 }
 
 void vehicleAppliesThrottleResponseCurve() {
-  // The default curve (Config::ThrottleCurveExponent == 2) is quadratic:
-  // output = sign(in) * |in|^2 / 100, so half trigger gives a quarter output
-  // and full trigger still reaches the limit. Linear (exp == 1) is a passthrough.
+  // The active default curve (Config::ThrottleCurveExponent == 1) is linear,
+  // so half trigger gives half output. Higher exponents soften the low end
+  // while full trigger still reaches the limit.
   FakeStream diagnostics;
   MotorDriver motorDriver(diagnostics);
   Vehicle vehicle(motorDriver);
