@@ -14,6 +14,7 @@ if [[ $# -ne 0 ]]; then
 fi
 
 python3 "$project_dir/test/check_contracts.py"
+python3 "$project_dir/test/check_plan_metadata.py"
 if [[ "$remote_links" == true ]]; then
   python3 "$project_dir/test/check_links.py" --remote
 else
