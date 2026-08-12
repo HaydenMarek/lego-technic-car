@@ -17,7 +17,7 @@ to the normative protocol, configuration, and hardware documents.
 | 1 | Reconcile documented and production defaults | High | [#1](https://github.com/HaydenMarek/lego-technic-car/issues/1) | Current code values documented; profile contract tests remain in #2 |
 | 2 | Add contract tests for production profiles and shared control logic | High | [#2](https://github.com/HaydenMarek/lego-technic-car/issues/2) | Completed 2026-08-12; effective PlatformIO flags and shared Hub logic are covered. |
 | 3 | Replace the conversational documentation trigger with a definition of done | High | [#3](https://github.com/HaydenMarek/lego-technic-car/issues/3) | Completed and closed 2026-08-12 |
-| 4 | Add explicit agent safety boundaries for physical hardware operations | High | [#4](https://github.com/HaydenMarek/lego-technic-car/issues/4) | Not started |
+| 4 | Add explicit agent safety boundaries for physical hardware operations | High | [#4](https://github.com/HaydenMarek/lego-technic-car/issues/4) | Completed 2026-08-12; instructions distinguish host validation from authorized physical operations. |
 | 5 | Clarify the hardware current-protection safety wording | High | [#5](https://github.com/HaydenMarek/lego-technic-car/issues/5) | Not started |
 | 6 | Add lifecycle metadata and organization for implementation plans | Medium | [#6](https://github.com/HaydenMarek/lego-technic-car/issues/6) | Not started |
 | 7 | Repair and strengthen external-documentation references | Medium | [#7](https://github.com/HaydenMarek/lego-technic-car/issues/7) | Completed 2026-08-12; primary references are descriptive, pinned where source behavior is cited, and CI verifies external URLs. |

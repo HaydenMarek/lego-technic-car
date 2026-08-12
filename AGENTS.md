@@ -35,6 +35,33 @@ unverified.
 When completing tracked work, update its tracking document and GitHub issue so
 their status matches the completed acceptance criteria.
 
+## Physical hardware boundaries
+
+Treat local builds, static analysis, unit tests, contract checks, and
+`./test/verify.sh` as non-hardware validation. They do not authorize, imply,
+or prove a physical result.
+
+Firmware uploads and their automatic device resets, serial-monitor sessions,
+or any command that can communicate with an attached Arduino or Hub require
+explicit user authorization for that exact operation. Do not infer that
+authorization from a request to build, test, diagnose, or change firmware.
+Read-only device discovery (for example, listing attached serial devices) is
+permitted only when explicitly relevant to the task and safe in the known
+power state; it is not authorization to open, reset, upload to, or control a
+device.
+
+Before any authorized operation that can move steering or energize a motor,
+obtain confirmation that the wheels are clear, the current power state is
+known, and a physical motor-power cutoff is accessible. Keep motor power
+disconnected for uploads and serial work unless that operation explicitly
+requires motor power. Ask the user to perform or confirm any physical setup
+that cannot be observed from the workspace.
+
+Report validation by evidence category: source inspection, host-side test,
+firmware build, device communication, or observed hardware behavior. Never
+present compilation, simulation, logs, or source inspection as an observed
+hardware result. State hardware behavior that was not physically verified.
+
 ## External documentation
 
 `EXTERNAL_DOCUMENTATION.md` collects useful external links and reference
