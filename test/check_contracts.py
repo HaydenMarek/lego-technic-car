@@ -4,17 +4,22 @@
 from __future__ import annotations
 
 import configparser
+import json
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
+class ContractError(Exception):
+    """An approved configuration contract was violated."""
+
+
 def fail(message: str) -> None:
-    print(f"contract check failed: {message}", file=sys.stderr)
-    raise SystemExit(1)
+    raise ContractError(message)
 
 
 def assignments(path: Path) -> dict[str, str]:
@@ -32,17 +37,33 @@ def require_values(name: str, actual: dict[str, str], expected: dict[str, str]) 
             fail(f"{name} {key} must be {value!r}, got {actual.get(key)!r}")
 
 
-def environment_flags(config: configparser.ConfigParser, environment: str) -> set[str]:
-    raw = config[environment]["build_flags"]
-    return {line.strip() for line in raw.splitlines() if line.strip().startswith("-D")}
+def effective_environment_flags(project_dir: Path) -> dict[str, set[str]]:
+    """Read PlatformIO's resolved flags, including inherited substitutions."""
+    from subprocess import CalledProcessError, check_output
+
+    try:
+        output = check_output(
+            ["pio", "project", "config", "--json-output",
+             "--project-dir", str(project_dir)],
+            text=True,
+        )
+    except FileNotFoundError:
+        fail("PlatformIO Core (pio) is required to resolve effective profiles")
+    except CalledProcessError as error:
+        fail(f"could not resolve PlatformIO profiles: {error}")
+
+    resolved = dict(json.loads(output))
+    result: dict[str, set[str]] = {}
+    for environment in ("env:uno_bench", "env:uno_bts7960"):
+        values = dict(resolved[environment])
+        result[environment] = {
+            flag for flag in values["build_flags"] if flag.startswith("-D")
+        }
+    return result
 
 
-def main() -> int:
-    config = configparser.ConfigParser(interpolation=None)
-    config.read(ROOT / "platformio.ini", encoding="utf-8")
-    if config["env"]["platform"] != "atmelavr@5.3.0":
-        fail("PlatformIO platform must be pinned to atmelavr@5.3.0")
-
+def validate_profiles(project_dir: Path) -> None:
+    flags_by_environment = effective_environment_flags(project_dir)
     expected_profiles = {
         "env:uno_bench": {
             "-DTECHNIC_RC_ENABLE_BTS7960=0",
@@ -60,10 +81,41 @@ def main() -> int:
         },
     }
     for environment, expected in expected_profiles.items():
-        flags = environment_flags(config, environment)
-        missing = expected - flags
-        if missing:
-            fail(f"{environment} is missing {', '.join(sorted(missing))}")
+        actual = flags_by_environment[environment]
+        if actual != expected:
+            fail(
+                f"{environment} effective build flags must be "
+                f"{sorted(expected)!r}, got {sorted(actual)!r}"
+            )
+
+
+def verify_temporary_mismatch_is_detected() -> None:
+    """Prove that a changed approved profile default fails the contract check."""
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        temporary_project = Path(temporary_directory)
+        source = ROOT / "platformio.ini"
+        changed = source.read_text(encoding="utf-8").replace(
+            "-DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=1",
+            "-DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=2",
+            1,
+        )
+        (temporary_project / "platformio.ini").write_text(
+            changed, encoding="utf-8"
+        )
+        try:
+            validate_profiles(temporary_project)
+        except ContractError:
+            return
+    fail("intentional profile mismatch was not detected")
+
+
+def main() -> int:
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(ROOT / "platformio.ini", encoding="utf-8")
+    if config["env"]["platform"] != "atmelavr@5.3.0":
+        fail("PlatformIO platform must be pinned to atmelavr@5.3.0")
+
+    validate_profiles(ROOT)
 
     require_values(
         "production Hub profile",
@@ -105,9 +157,14 @@ def main() -> int:
         if text not in configuration:
             fail(f"configuration document must contain approved profile statement: {text!r}")
 
+    verify_temporary_mismatch_is_detected()
     print("Profile and specification contract checks passed")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except ContractError as error:
+        print(f"contract check failed: {error}", file=sys.stderr)
+        raise SystemExit(1)

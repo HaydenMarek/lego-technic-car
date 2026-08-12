@@ -1,5 +1,7 @@
 """Production Pybricks program for the LEGO Technic RC car."""
 
+import control
+
 from pybricks.hubs import TechnicHub
 from pybricks.iodevices import UARTDevice, XboxController
 from pybricks.parameters import Button, Color, Port, Stop
@@ -100,10 +102,8 @@ YAW_SIGN = 1
 class DriftAssist:
     """Yaw-rate counter-steering state for the gyro drift assist.
 
-    Pure control logic with no Pybricks dependencies so it can be unit tested on
-    the host. test/test_assist.py mirrors this class; keep them in sync when the
-    control law changes (the same mirroring approach is used in
-    test/native/test_main.cpp for the throttle response curve).
+    Legacy inline implementation retained only for source-history continuity.
+    Runtime behavior uses control.DriftAssist from hub/control.py.
     """
 
     def __init__(self, gain, yaw_rate_per_steer, drift_entry_yaw_rate,
@@ -347,10 +347,12 @@ async def wait_for_arm(negative_limit, positive_limit, assist, assist_clock):
         left_trigger, right_trigger = controller.triggers()
         steering, _ = controller.joystick_left()
 
-        target = steering_target(
+        target = control.steering_target(
             int(steering),
             negative_limit,
             positive_limit,
+            STEERING_CURVE_EXPONENT,
+            STEERING_DIRECTION,
         )
 
         # Keep the always-active gyro live while drive output is still safely
@@ -407,7 +409,7 @@ async def main():
                     break
                 await wait(CONTROL_PERIOD_MS)
             assist_range = max(-negative_limit, positive_limit)
-            assist = DriftAssist(
+            assist = control.DriftAssist(
                 ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
                 ASSIST_DRIFT_ENTRY_YAW_RATE, ASSIST_DRIFT_YAW_RATE,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
@@ -459,16 +461,21 @@ async def main():
             # Right trigger drives forward; left trigger drives backward.
             # DRIVE_DIRECTION maps that intent to the mounted motor direction.
             drive_intent = int(right_trigger - left_trigger)
-            throttle = map_drive_intent(drive_intent, drive_maximum)
+            throttle = control.map_drive_intent(
+                drive_intent, drive_maximum, DRIVE_NEUTRAL_DEADBAND,
+                DRIVE_LAUNCH_MINIMUM,
+            )
             throttle *= DRIVE_DIRECTION
             steering = int(steering)
 
             # Steering is owned entirely by the Technic Hub and constrained to
             # the safe limits measured during startup calibration.
-            target = steering_target(
+            target = control.steering_target(
                 steering,
                 negative_limit,
                 positive_limit,
+                STEERING_CURVE_EXPONENT,
+                STEERING_DIRECTION,
             )
 
             # Fold yaw-rate drift assist into the target. Use

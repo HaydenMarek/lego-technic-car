@@ -18,6 +18,18 @@
 #error "Native tests require TECHNIC_RC_EXPECT_CURRENT_PROTECTION"
 #endif
 
+#ifndef TECHNIC_RC_EXPECT_BTS7960
+#error "Native tests require TECHNIC_RC_EXPECT_BTS7960"
+#endif
+
+#ifndef TECHNIC_RC_EXPECT_DYNAMIC_BRAKING
+#error "Native tests require TECHNIC_RC_EXPECT_DYNAMIC_BRAKING"
+#endif
+
+#ifndef TECHNIC_RC_EXPECT_THROTTLE_CURVE_EXPONENT
+#error "Native tests require TECHNIC_RC_EXPECT_THROTTLE_CURVE_EXPONENT"
+#endif
+
 namespace {
 
 // Mirrors Vehicle::shapeThrottle so the drive tests stay correct for any
@@ -132,6 +144,15 @@ void configuredBuildProfileMatchesExpectedUsbMonitorAccess() {
   const bool expectedProtection =
       TECHNIC_RC_EXPECT_CURRENT_PROTECTION != 0;
   assert(Config::EnableCurrentProtection == expectedProtection);
+
+  const bool expectedBts7960 = TECHNIC_RC_EXPECT_BTS7960 != 0;
+  assert(Config::EnableBts7960Outputs == expectedBts7960);
+
+  const bool expectedBraking = TECHNIC_RC_EXPECT_DYNAMIC_BRAKING != 0;
+  assert(Config::EnableDynamicBraking == expectedBraking);
+
+  assert(Config::ThrottleCurveExponent ==
+         TECHNIC_RC_EXPECT_THROTTLE_CURVE_EXPONENT);
 }
 
 void currentMonitorReportsWindowPeaksOnlyForBts7960Build() {
@@ -519,8 +540,9 @@ void vehicleAppliesThrottleResponseCurve() {
   assert(curveShape(0) == 0);
   assert(curveShape(100) == 100);
   assert(curveShape(-100) == -100);
-  assert(curveShape(50) == (Config::ThrottleCurveExponent == 1 ? 50 : 25));
-  assert(curveShape(-50) == (Config::ThrottleCurveExponent == 1 ? -50 : -25));
+  assert(Config::ThrottleCurveExponent == 1);
+  assert(curveShape(50) == 50);
+  assert(curveShape(-50) == -50);
 
   // setThrottle forwards the shaped value to both motor channels.
   vehicle.setThrottle(50);

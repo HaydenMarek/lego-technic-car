@@ -83,3 +83,16 @@ This checks documentation, native C++ and Python controls, and both firmware
 profiles without accessing hardware. `./test/verify.sh --remote-links` also
 resolves HTTP(S) Markdown links. CI pins Python 3.12, PlatformIO Core 6.1.19,
 and `atmelavr@5.3.0`.
+
+The profile-contract check is distinct from behavior tests: it resolves
+PlatformIO's effective flags (including inherited settings), checks the exact
+Arduino and Hub profile defaults above, and proves that a temporary changed
+throttle exponent is rejected. Native and Python tests then exercise motor and
+Hub control behavior. The host Python tests import [`hub/control.py`](../hub/control.py),
+the same pure control module used by both Hub programs.
+
+When an approved profile change is intentional, update this table,
+[`platformio.ini`](../platformio.ini), the relevant Hub program, and the exact
+expectations in [`test/check_contracts.py`](../test/check_contracts.py) and
+[`test/run-native-tests.sh`](../test/run-native-tests.sh) together. Then run
+`./test/verify.sh`; do not weaken the contract test to accept multiple defaults.

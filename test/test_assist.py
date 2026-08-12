@@ -1,95 +1,15 @@
 """Host-side tests for the gyro drift-assist control law.
 
-These tests run with a standard CPython interpreter (no Pybricks needed). The
-DriftAssist class below is a behaviorally identical mirror of the one in
-hub/main.py and hub/smoke_test.py so the pure control logic is checked
-independently. Keep this class in sync when the control law changes.
+These tests run with a standard CPython interpreter (no Pybricks needed) and
+import the same pure control implementation as both Hub programs.
 """
 
 import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hub"))
 
-class DriftAssist:
-    def __init__(self, gain, yaw_rate_per_steer, drift_entry_yaw_rate,
-                 drift_yaw_rate, yaw_rate_deadband, filter_alpha, assist_max,
-                 correction_slew, always_active, throttle_min, yaw_sign, dt):
-        self.gain = gain
-        self.yaw_rate_per_steer = yaw_rate_per_steer
-        self.drift_entry_yaw_rate = drift_entry_yaw_rate
-        self.drift_yaw_rate = drift_yaw_rate
-        self.yaw_rate_deadband = yaw_rate_deadband
-        self.filter_alpha = filter_alpha
-        self.assist_max = assist_max
-        self.correction_slew = correction_slew
-        self.always_active = always_active
-        self.throttle_min = throttle_min
-        self.yaw_sign = yaw_sign
-        self.dt = dt
-        self.prev_heading = None
-        self.prev_time_ms = None
-        self.filtered_yaw_rate = 0.0
-        self.correction = 0.0
-
-    def step(self, driver_target, heading, forward_throttle, now_ms=None):
-        base = driver_target if driver_target is not None else 0
-
-        if self.prev_heading is None:
-            self.prev_heading = heading
-            self.prev_time_ms = now_ms
-            return base, 0.0
-
-        dt = self.dt
-        if now_ms is not None and self.prev_time_ms is not None:
-            measured_dt = (now_ms - self.prev_time_ms) / 1000.0
-            if measured_dt > 0:
-                dt = measured_dt
-        raw_yaw_rate = (heading - self.prev_heading) / dt
-        self.prev_heading = heading
-        self.prev_time_ms = now_ms
-
-        if (forward_throttle < 0
-                or (not self.always_active
-                    and forward_throttle < self.throttle_min)):
-            self.filtered_yaw_rate = 0.0
-            self.correction = 0.0
-            return base, 0.0
-
-        self.filtered_yaw_rate += self.filter_alpha * (
-            raw_yaw_rate - self.filtered_yaw_rate
-        )
-        aligned_yaw_rate = self.yaw_sign * self.filtered_yaw_rate
-        desired_yaw_rate = base * self.yaw_rate_per_steer
-        if (aligned_yaw_rate * base < 0
-                and abs(aligned_yaw_rate) >= self.drift_entry_yaw_rate):
-            desired_yaw_rate = (
-                self.drift_yaw_rate if aligned_yaw_rate > 0
-                else -self.drift_yaw_rate
-            )
-
-        excess = aligned_yaw_rate - desired_yaw_rate
-
-        if abs(excess) <= self.yaw_rate_deadband:
-            correction = 0.0
-        else:
-            if excess > 0:
-                excess -= self.yaw_rate_deadband
-            else:
-                excess += self.yaw_rate_deadband
-            correction = self.gain * excess
-
-        if correction > self.assist_max:
-            correction = self.assist_max
-        elif correction < -self.assist_max:
-            correction = -self.assist_max
-
-        correction_change = correction - self.correction
-        if correction_change > self.correction_slew:
-            correction = self.correction + self.correction_slew
-        elif correction_change < -self.correction_slew:
-            correction = self.correction - self.correction_slew
-        self.correction = correction
-
-        return base - correction, correction
+from control import DriftAssist
 
 
 FAILURES = []

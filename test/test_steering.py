@@ -1,32 +1,24 @@
 """Host-side tests for the steering response curve and target mapping.
 
-Runs with a standard CPython interpreter (no Pybricks needed). The functions
-below mirror steering_curve / steering_target in hub/main.py and
-hub/smoke_test.py. Keep them in sync when the curve or mapping changes.
+Runs with a standard CPython interpreter (no Pybricks needed) and imports the
+same pure steering implementation as both Hub programs.
 """
 
 import sys
+from pathlib import Path
 
-# Mirrors the steering constants used by the Hub programs.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hub"))
+
+from control import steering_curve, steering_target as shared_steering_target
+
 STEERING_DIRECTION = 1
 STEERING_CURVE_EXPONENT = 2
 
-
-def steering_curve(value, exponent):
-    if value == 0:
-        return 0
-    mag = -value if value < 0 else value
-    shaped = mag
-    for _ in range(1, exponent):
-        shaped = shaped * mag // 100
-    return -shaped if value < 0 else shaped
-
-
 def steering_target(joystick, negative_limit, positive_limit):
-    directed = steering_curve(int(joystick), STEERING_CURVE_EXPONENT) * STEERING_DIRECTION
-    if directed < 0:
-        return negative_limit * (-directed) // 100
-    return positive_limit * directed // 100
+    return shared_steering_target(
+        joystick, negative_limit, positive_limit, STEERING_CURVE_EXPONENT,
+        STEERING_DIRECTION,
+    )
 
 
 FAILURES = []

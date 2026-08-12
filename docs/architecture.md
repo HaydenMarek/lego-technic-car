@@ -16,9 +16,9 @@ and [hardware.md](hardware.md).
   foldback/recovery, and emergency coast with a STOP-reset latch.
 - `Watchdog`: independent command-timeout detection.
 
-Gyro steering assist is Hub-side (`DriftAssist` in each Hub program). It
-controls the steering motor from IMU and controller input and does not alter the
-Arduino throttle/UART path.
+Gyro steering assist is Hub-side (`DriftAssist` in `hub/control.py`, imported
+by each Hub program). It controls the steering motor from IMU and controller
+input and does not alter the Arduino throttle/UART path.
 
 ## Rationale
 
