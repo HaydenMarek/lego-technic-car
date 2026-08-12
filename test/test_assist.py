@@ -301,6 +301,28 @@ def correction_slew_limits_steps_and_reversals():
           "got {0}".format(correction))
 
 
+def production_tuning_avoids_abrupt_correction():
+    assist = make(
+        gain=0.60, drift_rate=180, deadband=2, alpha=0.65,
+        amax=40, slew=5, always_active=True,
+    )
+    assist.step(0, 0.0, 50, 1000)
+
+    # A one-degree heading step over one 20 ms frame is a 50 deg/s raw yaw
+    # event. The proportional request is much larger, but production tuning
+    # must apply only one 5-degree correction step instead of jumping toward
+    # full lock.
+    _, correction = assist.step(0, 1.0, 50, 1020)
+    check("production.impulse_slew", close(correction, 5.0),
+          "got {0}".format(correction))
+
+    # An equal opposite heading step requests the opposite correction. The
+    # command first returns to center instead of crossing sides in one frame.
+    _, correction = assist.step(0, 0.0, 50, 1040)
+    check("production.reversal_slew", close(correction, 0.0),
+          "got {0}".format(correction))
+
+
 def yaw_sign_flips_sensor_mapping():
     assist = make(gain=0.1, amax=100, yaw=-1)
     assist.step(0, 0.0, 50)
@@ -324,6 +346,7 @@ def main():
     always_active_includes_stopped_but_not_reverse()
     correction_is_clamped()
     correction_slew_limits_steps_and_reversals()
+    production_tuning_avoids_abrupt_correction()
     yaw_sign_flips_sensor_mapping()
 
     if FAILURES:

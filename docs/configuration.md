@@ -24,10 +24,12 @@ files.
 | Steering-curve exponent | 2 | 2 |
 | Gyro assist enabled | `True` | `True` |
 | Assist always active | `True` | `False` |
-| Assist gain | 0.75 | 0.10 |
-| Drift yaw rate | 220 | 120 |
+| Assist gain | 0.60 | 0.10 |
+| Drift yaw rate | 180 | 120 |
 | Yaw-rate deadband | 2 | 8 |
-| Filter alpha | 0.80 | 0.25 |
+| Filter alpha | 0.65 | 0.25 |
+| Maximum assist correction | 40 degrees | 12 degrees |
+| Correction slew per 20 ms frame | 5 degrees | 24 degrees |
 
 ## Bench operation
 
@@ -68,10 +70,13 @@ Throttle shaping happens after UART parsing. Steering shaping happens before
 limit mapping and assist.
 
 The Hub IMU supplies rate-only drift stabilization with proportional, filtered,
-slew-limited correction and no integral term. Production assist starts after
-calibration; reverse disables it and clears state. With the production car
-unarmed and joystick centered, rotating it clockwise should steer wheels
-counterclockwise; otherwise set `YAW_SIGN = -1`.
+slew-limited correction and no integral term. Production correction is capped
+at 40 degrees and can change by at most 5 degrees per 20 ms control frame. The
+bounded authority and 250 deg/s target slew prevent abrupt full-lock reversals
+while retaining counter-steer for a sustained yaw event. Production assist
+starts after calibration; reverse disables it and clears state. With the
+production car unarmed and joystick centered, rotating it clockwise should
+steer wheels counterclockwise; otherwise set `YAW_SIGN = -1`.
 
 ## Verification and CI
 
