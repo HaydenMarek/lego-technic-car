@@ -103,7 +103,13 @@ class DriftAssist:
         self.prev_heading = heading
         self.prev_time_ms = now_ms
 
-        if not self.always_active and forward_throttle < self.throttle_min:
+        # Reverse always bypasses gyro assistance. The optional forward-throttle
+        # gate additionally disables it while parked or at low forward throttle
+        # when always-active mode is off. Reset state in either case so a
+        # forward re-entry cannot apply stale correction.
+        if (forward_throttle < 0
+                or (not self.always_active
+                    and forward_throttle < self.throttle_min)):
             self.filtered_yaw_rate = 0.0
             self.correction = 0.0
             return base, 0.0

@@ -71,9 +71,8 @@ STEERING_CURVE_EXPONENT = 2
 # yaw rate below, so a controlled slide can be sustained. The assist is
 # filtered, deadbanded, and capped. It remains active after calibration even
 # while stopped so correction direction is visible when the car is rotated by
-# hand. This also keeps it active in reverse, where the physical
-# steering-to-yaw relationship is inverted, so reverse handling must be tested
-# carefully.
+# hand. Reverse always disables assist because the physical steering-to-yaw
+# relationship is inverted while backing up.
 
 ENABLE_GYRO_ASSIST = True
 ASSIST_ALWAYS_ACTIVE = True
@@ -160,10 +159,13 @@ class DriftAssist:
         self.prev_heading = heading
         self.prev_time_ms = now_ms
 
-        # An optional forward-throttle gate is retained for configurations that
-        # do not want correction while parked or reversing. Production keeps
-        # always_active enabled so hand rotation produces visible counter-steer.
-        if not self.always_active and forward_throttle < self.throttle_min:
+        # Reverse always bypasses gyro assistance. The optional forward-throttle
+        # gate additionally disables it while parked or at low forward throttle
+        # when always-active mode is off. Reset state in either case so a
+        # forward re-entry cannot apply stale correction.
+        if (forward_throttle < 0
+                or (not self.always_active
+                    and forward_throttle < self.throttle_min)):
             self.filtered_yaw_rate = 0.0
             self.correction = 0.0
             return base, 0.0

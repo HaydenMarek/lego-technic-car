@@ -47,7 +47,9 @@ class DriftAssist:
         self.prev_heading = heading
         self.prev_time_ms = now_ms
 
-        if not self.always_active and forward_throttle < self.throttle_min:
+        if (forward_throttle < 0
+                or (not self.always_active
+                    and forward_throttle < self.throttle_min)):
             self.filtered_yaw_rate = 0.0
             self.correction = 0.0
             return base, 0.0
@@ -254,7 +256,7 @@ def throttle_gate_excludes_stopped_and_reverse():
           "got {0}".format(correction))
 
 
-def always_active_includes_stopped_and_reverse():
+def always_active_includes_stopped_but_not_reverse():
     assist = make(gain=1.0, amax=100, always_active=True)
     assist.step(0, 0.0, 0)
 
@@ -263,8 +265,10 @@ def always_active_includes_stopped_and_reverse():
           "got {0}".format(correction))
 
     _, correction = assist.step(0, 0.0, -50)
-    check("always.reverse", close(correction, -100.0),
+    check("always.reverse", correction == 0.0,
           "got {0}".format(correction))
+    check("always.reverse_filter_reset", assist.filtered_yaw_rate == 0.0)
+    check("always.reverse_correction_reset", assist.correction == 0.0)
 
 
 def correction_is_clamped():
@@ -317,7 +321,7 @@ def main():
     filter_smooths_rate_step()
     measured_sample_interval_sets_yaw_rate()
     throttle_gate_excludes_stopped_and_reverse()
-    always_active_includes_stopped_and_reverse()
+    always_active_includes_stopped_but_not_reverse()
     correction_is_clamped()
     correction_slew_limits_steps_and_reversals()
     yaw_sign_flips_sensor_mapping()

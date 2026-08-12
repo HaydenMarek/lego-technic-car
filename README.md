@@ -229,12 +229,13 @@ output-rate limiting, not a full PID. There is deliberately no integral term to
 wind up and hold stale correction. The final target is clamped to the
 calibrated steering limits. The production program sets
 `ASSIST_ALWAYS_ACTIVE = True`, so assist starts immediately after steering
-calibration, remains active before arming, and also operates while parked,
-coasting, or reversing. Arduino drive output remains stopped before arming, so
-the car can be rotated by hand to verify the correction direction safely.
-Because steering produces the opposite yaw direction in reverse, test reverse
-handling carefully; the same correction sign that stabilizes forward driving
-can reinforce rotation in reverse.
+calibration and remains active before arming, while parked, or while coasting.
+Arduino drive output remains stopped before arming, so the car can be rotated
+by hand to verify the correction direction safely. Regardless of this setting,
+any negative throttle (reverse) immediately disables gyro assistance and
+clears its filtered rate and correction state. This prevents the
+forward-driving correction sign from reinforcing yaw while the
+steering-to-yaw relationship is inverted in reverse.
 
 The smoke-test program retains the forward-throttle gate. When
 `ASSIST_ALWAYS_ACTIVE` is `False`, assist is active only at or above
@@ -245,7 +246,7 @@ Defaults:
 | Setting | Production | Smoke test | Meaning |
 | --- | --- | --- | --- |
 | `ENABLE_GYRO_ASSIST` | `True` | `True` | Master switch |
-| `ASSIST_ALWAYS_ACTIVE` | `True` | `False` | Bypass the forward-throttle gate |
+| `ASSIST_ALWAYS_ACTIVE` | `True` | `False` | Bypass the parked/low-forward-throttle gate; reverse always disables assist |
 | `ASSIST_GAIN` | `0.75` | `0.10` | deg steering / (deg/s yaw-rate error) |
 | `ASSIST_YAW_RATE_PER_STEER` | `3.0` | `3.0` | requested deg/s yaw per deg of same-direction driver steering |
 | `ASSIST_DRIFT_ENTRY_YAW_RATE` | `20` | `20` | yaw rate that enables slide-hold when counter-steering |
