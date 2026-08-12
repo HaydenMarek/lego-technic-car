@@ -1,5 +1,15 @@
 # Agentic flow refactor
 
+| Field | Value |
+| --- | --- |
+| Lifecycle | active |
+| Owner | Unassigned |
+| Created | 2026-08-10 |
+| Last updated | 2026-08-12 |
+| Approval | This tracking plan is not implementation authorization. Each work item requires its linked GitHub issue and any owner decisions it identifies. |
+| Normative status | Non-normative; the [repository README](../../README.md) and its linked normative documents are authoritative. |
+| Implementation tracking | [#6](https://github.com/HaydenMarek/lego-technic-car/issues/6), [#9](https://github.com/HaydenMarek/lego-technic-car/issues/9), and [#11](https://github.com/HaydenMarek/lego-technic-car/issues/11) |
+
 ## Purpose
 
 This document tracks improvements identified during the 2026-08-10 review of
@@ -19,7 +29,7 @@ to the normative protocol, configuration, and hardware documents.
 | 3 | Replace the conversational documentation trigger with a definition of done | High | [#3](https://github.com/HaydenMarek/lego-technic-car/issues/3) | Completed and closed 2026-08-12 |
 | 4 | Add explicit agent safety boundaries for physical hardware operations | High | [#4](https://github.com/HaydenMarek/lego-technic-car/issues/4) | Completed 2026-08-12; instructions distinguish host validation from authorized physical operations. |
 | 5 | Clarify the hardware current-protection safety wording | High | [#5](https://github.com/HaydenMarek/lego-technic-car/issues/5) | Completed 2026-08-12; terminology distinguishes BTS7960 IC safeguards from absent independent vehicle protection. Follow-up: [#11](https://github.com/HaydenMarek/lego-technic-car/issues/11). |
-| 6 | Add lifecycle metadata and organization for implementation plans | Medium | [#6](https://github.com/HaydenMarek/lego-technic-car/issues/6) | Not started |
+| 6 | Add lifecycle metadata and organization for implementation plans | Medium | [#6](https://github.com/HaydenMarek/lego-technic-car/issues/6) | Completed 2026-08-12; retained plans have lifecycle metadata and the convention defines archival, authority, and tracking requirements. |
 | 7 | Repair and strengthen external-documentation references | Medium | [#7](https://github.com/HaydenMarek/lego-technic-car/issues/7) | Completed 2026-08-12; primary references are descriptive, pinned where source behavior is cited, and CI verifies external URLs. |
 | 8 | Split the monolithic README into focused documentation | Medium | [#8](https://github.com/HaydenMarek/lego-technic-car/issues/8) | Completed; documentation split into README and `docs/` |
 | 9 | Add one verification command and continuous integration | High | [#9](https://github.com/HaydenMarek/lego-technic-car/issues/9) | Not started |
