@@ -4,7 +4,7 @@
   UARTDevice API used for the Hub-to-Arduino link (port C, 9600 baud,
   half-duplex). Used to send `D,<throttle>` commands and the `MODE` handshake.
 
-- https://docs.pybricks.com/en/v4.0.0/hubs/technic_hub.html
+- https://docs.pybricks.com/en/v4.0.0/hubs/technichub.html
   TechnicHub built-in functions, including `hub.imu` and the status light used
   to show blue limited-power and red full-power drive modes.
 
@@ -12,14 +12,14 @@
   XboxController API. Its `buttons.pressed()` result includes `Button.LB` and
   `Button.RB`, used together to switch from limited to full-power mode.
 
-- https://docs.pybricks.com/en/v4.0.0/robotics/imu.html
-  Built-in IMU used by the gyro steering assist. `hub.imu.heading()` returns a
+- https://docs.pybricks.com/en/v4.0.0/hubs/technichub.html#pybricks.hubs.TechnicHub.imu
+  Technic Hub IMU API used by the gyro steering assist. `hub.imu.heading()` returns a
   continuous (unwrapped) heading in degrees, clockwise positive, resolved about
   the vertical axis automatically from gravity (so the Hub mounting orientation
   does not matter as long as one face stays up). `hub.imu.ready()` reports when
   the IMU has settled after its boot auto-calibration. Verified against the
-  Pybricks MicroPython source (pybricks/common/pb_type_imu.c,
-  lib/pbio/src/imu.c): heading accumulates across full turns
+  [Pybricks MicroPython v3.6.1 source](https://github.com/pybricks/pybricks-micropython/blob/v3.6.1/pybricks/common/pb_type_imu.c)
+  (`pybricks/common/pb_type_imu.c`, `lib/pbio/src/imu.c`): heading accumulates across full turns
   (`heading_rotations * 360 + heading_projection`), so it is NOT wrapped to
   0..360; the assist wraps the heading error to [-180, 180] itself.
 
@@ -35,7 +35,7 @@
   validating PWM-frequency changes and maintaining the raw-threshold current
   monitor and software cutoff.
 
-- https://docs.arduino.cc/arduino-cli/platform-specification/#serial-monitor-control-signal-configuration
+- https://arduino.github.io/arduino-cli/0.19/platform-specification/
   Arduino documentation for DTR/RTS-triggered auto-reset when a serial monitor
   opens. Relevant to starting the USB current monitor before the Hub program so
   the Hub receives the post-reset `READY` handshake.

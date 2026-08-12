@@ -98,6 +98,30 @@ Pure control behavior also has host-side checks that need only a C++17 compiler:
 ./test/run-native-tests.sh
 ```
 
+## Verification and CI
+
+Run the complete non-hardware completion gate from the repository root:
+
+```sh
+./test/verify.sh
+```
+
+It checks the documented configuration contract, local Markdown links, native
+C++ and Python control tests, and both Arduino firmware profiles. It never
+uploads firmware or accesses an Arduino, Hub, controller, motor supply, or
+secrets. `./test/verify.sh --remote-links` additionally resolves HTTP(S)
+Markdown-link targets; it needs outbound network access and is the mode used
+in GitHub Actions. Bare reference URLs in `EXTERNAL_DOCUMENTATION.md` are kept
+out of CI because several primary vendors block automated probes; validate
+those manually when updating a referenced hardware assumption. The workflow
+runs on every push and pull request.
+
+The pinned CI toolchain is Python 3.12, PlatformIO Core 6.1.19, and the
+`atmelavr@5.3.0` platform. Hub programs target the Pybricks 4.0.0 API cited in
+[`EXTERNAL_DOCUMENTATION.md`](EXTERNAL_DOCUMENTATION.md); Pybricks itself is
+not installed in CI because Hub imports are intentionally excluded from the
+host-side pure-control tests.
+
 ## Program pairs
 
 Two deliberately paired configurations prevent smoke-test and real-motor modes
