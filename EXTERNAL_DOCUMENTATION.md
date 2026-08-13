@@ -1,43 +1,30 @@
 # External documentation
 
-- [Pybricks v4.0.0 `UARTDevice` API and Powered Up UART pinout](https://docs.pybricks.com/en/v4.0.0/iodevices/uartdevice.html)
-  ("Generic UART Device", pinout table and `UARTDevice` constructor). This is
-  the primary reference for the Hub-to-Arduino link (port C, 9600 baud,
-  half-duplex) used to send `D,<throttle>` commands and the `MODE` handshake.
+## v2 references
 
-- [Pybricks v4.0.0 `TechnicHub` API](https://docs.pybricks.com/en/v4.0.0/hubs/technichub.html)
-  ("Technic Hub" and "Using the IMU"). Covers `hub.imu` and the status light
-  used to show blue limited-power and red full-power drive modes.
-
-- [Pybricks v4.0.0 `XboxController` API](https://docs.pybricks.com/en/v4.0.0/iodevices/xboxcontroller.html)
-  (`buttons.pressed()`). Its result includes `Button.LB` and `Button.RB`, used
-  together to switch from limited to full-power mode.
-
-- [Pybricks v4.0.0 IMU API](https://docs.pybricks.com/en/v4.0.0/hubs/technichub.html#pybricks.hubs.TechnicHub.imu)
-  (the `heading()` and `ready()` members). The gyro steering assist uses a
-  continuous heading in degrees, clockwise positive, resolved about the
-  vertical axis automatically from gravity. `ready()` reports when boot
-  auto-calibration has settled. The unwrapped behavior is also verified against
-  the [Pybricks MicroPython v3.6.1 source pinned at commit `101c6ba`](https://github.com/pybricks/pybricks-micropython/blob/101c6babb592148bda9a8fd912b7953c7d561c0a/pybricks/common/pb_type_imu.c)
-  (`pybricks/common/pb_type_imu.c` and
-  [`lib/pbio/src/imu.c`](https://github.com/pybricks/pybricks-micropython/blob/101c6babb592148bda9a8fd912b7953c7d561c0a/lib/pbio/src/imu.c)): heading accumulates across full turns
-  (`heading_rotations * 360 + heading_projection`), so it is not wrapped to
-  0..360; the assist performs any required wrapping itself.
-
-- [Pybricks v4.0.0 `Motor.track_target()` API](https://docs.pybricks.com/en/v4.0.0/pupdevices/motor.html)
-  ("Motor control: Target angle"). The gyro assist continuously calls
-  `track_target()` because it skips normal smooth acceleration and drives a
-  changing steering target as fast as the motor controller permits.
-
+- [Bluepad32 documentation](https://bluepad32.readthedocs.io/en/latest/) —
+  controller-host overview and supported-controller information. The original
+  ESP32 supports the broadest listed controller set; confirm the installed Xbox
+  model and firmware at physical bring-up.
+- [Bluepad32 Arduino + ESP32 guidance](https://bluepad32.readthedocs.io/en/latest/plat_arduino/)
+  and its [ESP-IDF + Arduino + Bluepad32 template](https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template)
+  — the supported PlatformIO integration retained in
+  `third_party/bluepad32-template`. It supplies Bluepad32, BTstack, and its
+  matching Arduino bridge as a pinned submodule.
+- [Arduino-ESP32 LEDC API](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/ledc.html)
+  — `ledcAttach()` and `ledcWrite()` configure the ESP32's PWM used for the
+  BTS7960 inputs and 50 Hz hobby-servo signal.
 - [Infineon BTS 7960B/P datasheet](https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf)
-  (Rev. 1.1, pp. 11, 13–17, and 22: PWM characteristics, protection functions,
-  current-sense diagnostics, and layout). This is chip-level documentation for
-  the BTS7960 half-bridge IC; it does not establish the wiring, component
-  values, thermal performance, or current-sense scaling of an IBT-2 or other
-  clone board. Board-specific facts in this repository are explicitly marked as
-  installed-hardware observations.
+  — chip-level PWM and protection reference only. It does not validate an
+  IBT-2 clone's wiring, thermal performance, or 3.3 V logic threshold.
 
-- [Arduino platform specification: serial port monitoring](https://arduino.github.io/arduino-cli/0.19/platform-specification/)
-  ("Serial Monitor" and DTR/RTS auto-reset behavior). Relevant to starting the
-  USB current monitor before the Hub program so the Hub receives the post-reset
-  `READY` handshake.
+No servo, Technic adapter, or buck converter part number has been selected yet.
+Add the selected components' vendor datasheets here during authorized physical
+bring-up; their signal voltage, travel, and stall-current values are not safe
+to assume from a generic hobby-servo description.
+
+## Historical v1 research
+
+The Pybricks, Technic Hub, and LEGO UART references remain in
+[`legacy/v1/EXTERNAL_DOCUMENTATION.md`](legacy/v1/EXTERNAL_DOCUMENTATION.md).
+They are historical research, not v2 dependencies.

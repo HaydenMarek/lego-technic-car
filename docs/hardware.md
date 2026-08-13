@@ -1,100 +1,56 @@
-# Hardware revision and safety
+# v2 hardware, power, and safety
 
-**Status: normative.** This document is authoritative for the documented
-hardware revision, wiring, measurement-based protection settings, and safety.
+## Safety boundary
 
 > [!WARNING]
-> The documented vehicle configuration has **no independent system-level
-> hardware current protection**: no externally rated fuse, independent
-> protection circuit, or automatic vehicle-level motor-power cutoff is
-> installed. The BTS7960 driver IC has integrated device-level protections;
-> they do not replace independent vehicle protection. Firmware foldback,
-> emergency coast, and the driver IC cannot cover every Arduino crash, wiring
-> fault, incorrect calibration, or power-stage failure.
+> The vehicle has no independent vehicle-level motor-power protection. Add a
+> correctly rated external fuse/protection system and retain an accessible
+> motor-power cutoff before operational use. BTS7960 IC protections do not
+> protect every wiring fault, controller failure, firmware failure, or failed
+> clone-board power stage.
 
-## Hardware revision
+No v2 firmware feature monitors current, folds back power, selects a
+limited/full-power mode, or supplies gyro assistance. GPIO 34 and GPIO 35 are
+input-only and reserved for a later, separately designed current-sensing path.
 
-The Arduino UNO drives one BTS7960/IBT-2 bridge. Two buggy motors share its
-`M+`/`M-` output with opposite polarity. Motor power is a 2S battery; logic
-uses a separate regulated 5 V supply. The Hub and Arduino use a 3.3 V/5 V
-level-shifted SoftwareSerial connection.
+## ESP32 and BTS7960 wiring
 
-## UART wiring
+Use a classic ESP32 DevKit/WROOM. The ESP32 pins are 3.3 V only.
 
-| Powered Up port C pin | Function | Arduino UNO |
+| ESP32 GPIO | 74HCT buffer input | Buffer output / vehicle destination |
 | --- | --- | --- |
-| 3 | GND | GND (common ground) |
-| 5 | Hub TX, 3.3 V | D10 (RX), direct |
-| 6 | Hub RX, 3.3 V | D11 (TX), via 5 V→3.3 V divider |
+| 25 | drive PWM | BTS7960 `RPWM` |
+| 26 | drive PWM | BTS7960 `LPWM` |
+| 27 | enable | BTS7960 `R_EN` |
+| 33 | enable | BTS7960 `L_EN` |
+| 32 | servo position | hobby-servo signal, if its datasheet accepts 3.3 V; otherwise buffer it too |
+| 34 | reserved input | future current sensing only |
+| 35 | reserved input | future current sensing only |
 
-Hub TX has worked directly into the UNO input. Arduino D11 must be reduced
-before the Hub with a 1 kΩ upper and 2 kΩ lower resistor divider (about 3.33 V).
-Do not assume Hub UART pins are 5 V tolerant; verify signal voltage and level
-shifting on the exact hardware before connecting it.
+Power the 74HCT-family buffer at 5 V. Its TTL-compatible inputs reliably see
+ESP32 3.3 V HIGH levels and its outputs present 5 V to the BTS7960 controls.
+Do **not** assume an IBT-2 clone directly accepts 3.3 V logic. Tie the ESP32,
+buffer, BTS7960 logic, servo-supply, and motor-supply signal grounds together.
 
-## BTS7960 wiring
+The paired buggy motors remain on one BTS7960 bridge and must retain their
+opposite polarity because they are mirror-mounted. Verify direction with the
+wheels clear; `Config::InvertDriveDirection` flips the logical direction
+without rewiring powered motors.
 
-| BTS7960 pin | Arduino UNO pin |
-| --- | --- |
-| `RPWM` | D5 (PWM) |
-| `LPWM` | D6 (PWM) |
-| `R_EN` | D2 |
-| `L_EN` | D4 |
-| `L_IS` | A0, external 300 Ω to GND |
-| `R_IS` | A1, external 300 Ω to GND |
-| `VCC` | Arduino 5 V logic supply |
-| `GND` | Arduino GND/common signal ground |
+## Power
 
-Connect battery positive to `B+` through the main switch and battery negative
-to `B-`/common ground. Connect motor 1 as `M+`/`M-` and motor 2 as
-`M-`/`M+`. Terminal order varies by clone board: follow the PCB labels.
-Never feed motor battery positive into Arduino `5V`, `VIN`, or module logic
-`VCC`. Add 10 kΩ pull-downs from `R_EN` and `L_EN` to ground unless the
-exact module is verified to provide them.
+- Keep the existing 2S motor battery and BTS7960 motor supply only after the
+  required independent protection/cutoff has been addressed.
+- Supply the servo from a dedicated regulated 5–6 V buck converter sized with
+  stall-current margin. Do not source it from the ESP32 development board.
+- Keep the ESP32 on its separate regulated logic supply. Share ground only;
+  do not join the regulated positive rails.
+- Check the selected servo's datasheet for its supply range, stall current,
+  signal-level requirement, travel limits, and horn/Technic adapter mechanics.
 
-## Logic power filtering
+## Hardware-only work
 
-For untethered use, connect a regulated 5 V buck converter on a separate 2S
-battery branch to Arduino `5V` and GND. Fit a 470–1000 µF electrolytic rated
-at least 10 V plus a 100 nF ceramic directly at the Arduino, with short leads.
-This resolved observed launch-related stops. Verify approximately 5.0 V under
-load. Do not feed 5 V into `VIN`, and do not parallel USB with direct 5 V
-unless sources are isolated.
-
-## Current sensing and protection
-
-Production samples A0 (`L_IS`) and A1 (`R_IS`) every 5 ms and reports
-100 ms peak raw 10-bit ADC readings over USB. The installed module measured
-10 kΩ to ground on each IS pin; the external 300 Ω resistors make about 291 Ω
-effective. The approximate conversion is `raw ADC count * 0.143 A`, but
-protection uses raw counts because sensing accuracy and channel scaling vary.
-
-Wheelspin testing observed peaks of `L_IS=101` and `R_IS=50`; production
-thresholds are 112 and 55 (10% margin). Both channels are checked while output
-is nonzero. [Protocol failsafe](protocol.md#failsafe) defines foldback and the
-emergency latch. Adjust thresholds only after repeatable loaded data and retain
-margin below locked-rotor current.
-
-The BTS7960 IC datasheet describes integrated overcurrent, short-circuit,
-overtemperature, overvoltage, and undervoltage protections. These are
-device-level features, not independently rated vehicle protection: this
-documented build has no external fuse, independent current-protection circuit,
-or automatic motor-power cutoff. The IC datasheet also does not establish the
-protection behavior of a particular IBT-2 clone board or the vehicle wiring.
-Independent vehicle-level protection is tracked in [issue #11](https://github.com/HaydenMarek/lego-technic-car/issues/11); do not select a fuse rating or cutoff design without measurements and owner approval.
-
-## Power safety
-
-- A 2S pack is about 7.4 V nominal and 8.4 V fully charged.
-- Keep wheels unloaded during powered bench tests. Avoid stalls and disconnect
-  power if a motor or wire becomes hot.
-- Never power motor current through a breadboard or Arduino traces.
-- Power Arduino and Hub/controller logic before motor power; disconnect motor
-  power first when shutting down.
-- Battery monitoring, low-voltage cutoff, temperature sensing, precision current
-  calibration, and independent system-level hardware current protection are not
-  implemented. The BTS7960 IC's integrated device-level protections remain
-  present but do not close those vehicle-level gaps.
-
-Production uses `DRIVE_DIRECTION = -1` for the installed orientation. Change
-direction only while powered down and retain opposite-polarity motor wiring.
+Calibration, upload, serial monitoring, pairing, and energized testing require
+explicit authorization. Before any operation capable of moving the wheels,
+confirm wheels are clear, motor power is disconnected unless specifically
+needed, power state is known, and the physical cutoff is accessible.

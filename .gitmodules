@@ -1,0 +1,3 @@
+[submodule "third_party/bluepad32-template"]
+	path = third_party/bluepad32-template
+	url = https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git
