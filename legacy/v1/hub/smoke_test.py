@@ -1,7 +1,5 @@
 """Xbox, steering, UART, and failsafe smoke test for uno_bench firmware."""
 
-import control
-
 from pybricks.hubs import TechnicHub
 from pybricks.iodevices import UARTDevice, XboxController
 from pybricks.parameters import Button, Port, Stop
@@ -60,11 +58,7 @@ ASSIST_CORRECTION_SLEW = 24
 ASSIST_THROTTLE_MIN = 5
 YAW_SIGN = 1
 class DriftAssist:
-    """Yaw-rate counter-steering state for the gyro drift assist.
-
-    Legacy inline implementation retained only for source-history continuity.
-    Runtime behavior uses control.DriftAssist from hub/control.py.
-    """
+    """Yaw-rate counter-steering state for the gyro drift assist."""
 
     def __init__(self, gain, yaw_rate_per_steer, drift_entry_yaw_rate,
                  drift_yaw_rate, yaw_rate_deadband, filter_alpha, assist_max,
@@ -257,7 +251,7 @@ async def main():
                 if hub.imu.ready():
                     break
                 await wait(CONTROL_PERIOD_MS)
-            assist = control.DriftAssist(
+            assist = DriftAssist(
                 ASSIST_GAIN, ASSIST_YAW_RATE_PER_STEER,
                 ASSIST_DRIFT_ENTRY_YAW_RATE, ASSIST_DRIFT_YAW_RATE,
                 ASSIST_YAW_RATE_DEADBAND, ASSIST_FILTER_ALPHA,
@@ -274,12 +268,8 @@ async def main():
             steering, _ = controller.joystick_left()
 
             throttle = int(right_trigger - left_trigger)
-            target = control.steering_target(
-                int(steering),
-                negative_limit,
-                positive_limit,
-                STEERING_CURVE_EXPONENT,
-                STEERING_DIRECTION,
+            target = steering_target(
+                int(steering), negative_limit, positive_limit
             )
 
             # Fold yaw-rate drift assist into the steering target.

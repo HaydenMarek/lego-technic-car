@@ -1,24 +1,25 @@
 """Host-side tests for the steering response curve and target mapping.
 
-Runs with a standard CPython interpreter (no Pybricks needed) and imports the
-same pure steering implementation as both Hub programs.
+Runs with a standard CPython interpreter (no Pybricks needed) and extracts the
+deployed pure steering implementation from hub/main.py.
 """
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hub"))
+from load_hub_control import load_definitions
 
-from control import steering_curve, steering_target as shared_steering_target
 
-STEERING_DIRECTION = 1
-STEERING_CURVE_EXPONENT = 2
-
-def steering_target(joystick, negative_limit, positive_limit):
-    return shared_steering_target(
-        joystick, negative_limit, positive_limit, STEERING_CURVE_EXPONENT,
-        STEERING_DIRECTION,
-    )
+HUB_MAIN = Path(__file__).resolve().parent.parent / "hub" / "main.py"
+DEFINITIONS = load_definitions(
+    HUB_MAIN,
+    "STEERING_DIRECTION",
+    "STEERING_CURVE_EXPONENT",
+    "steering_curve",
+    "steering_target",
+)
+steering_curve = DEFINITIONS["steering_curve"]
+steering_target = DEFINITIONS["steering_target"]
 
 
 FAILURES = []

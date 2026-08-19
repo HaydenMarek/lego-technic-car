@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import configparser
 import json
 import re
@@ -130,7 +131,7 @@ def main() -> int:
             "ASSIST_DRIFT_YAW_RATE": "180",
             "ASSIST_YAW_RATE_DEADBAND": "2",
             "ASSIST_FILTER_ALPHA": "0.65",
-            "ASSIST_MAX": "40",
+            "ASSIST_MAX": "None",
             "ASSIST_CORRECTION_SLEW": "5",
         },
     )
@@ -150,6 +151,25 @@ def main() -> int:
             "ASSIST_CORRECTION_SLEW": "24",
         },
     )
+
+    for relative_path in ("hub/main.py", "hub/smoke_test.py"):
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        if re.search(
+            r"^\s*(?:import control|from control import)", source, re.MULTILINE
+        ):
+            fail(
+                f"{relative_path} must be standalone and must not import "
+                "the host-side control module"
+            )
+        tree = ast.parse(source, filename=relative_path)
+        uses_control_module = any(
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "control"
+            for node in ast.walk(tree)
+        )
+        if uses_control_module:
+            fail(f"{relative_path} must use its embedded control definitions")
 
     configuration = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
     for text in (

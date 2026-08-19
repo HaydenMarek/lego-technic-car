@@ -1,15 +1,17 @@
 """Host-side tests for the gyro drift-assist control law.
 
 These tests run with a standard CPython interpreter (no Pybricks needed) and
-import the same pure control implementation as both Hub programs.
+extract the deployed pure control implementation from hub/main.py.
 """
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hub"))
+from load_hub_control import load_definitions
 
-from control import DriftAssist
+
+HUB_MAIN = Path(__file__).resolve().parent.parent / "hub" / "main.py"
+DriftAssist = load_definitions(HUB_MAIN, "DriftAssist")["DriftAssist"]
 
 
 FAILURES = []
@@ -202,6 +204,21 @@ def correction_is_clamped():
           "got {0}".format(correction))
 
 
+def calibrated_span_allows_full_range_assist():
+    negative_limit, positive_limit = -80, 80
+    assist = make(gain=1.0, rate_per_steer=0.0,
+                  amax=positive_limit - negative_limit)
+    assist.step(positive_limit, 0.0, 50)
+
+    # The correction can cross the complete calibrated span, allowing assist
+    # to move from the driver's full right lock to full left lock.
+    target, correction = assist.step(positive_limit, 3.2, 50)
+    check("full_range.correction", close(correction, 160.0),
+          "got {0}".format(correction))
+    check("full_range.target", close(target, negative_limit),
+          "got {0}".format(target))
+
+
 def correction_slew_limits_steps_and_reversals():
     assist = make(gain=1.0, amax=100, slew=8)
     assist.step(0, 0.0, 50)
@@ -224,7 +241,7 @@ def correction_slew_limits_steps_and_reversals():
 def production_tuning_avoids_abrupt_correction():
     assist = make(
         gain=0.60, drift_rate=180, deadband=2, alpha=0.65,
-        amax=40, slew=5, always_active=True,
+        amax=160, slew=5, always_active=True,
     )
     assist.step(0, 0.0, 50, 1000)
 
@@ -265,6 +282,7 @@ def main():
     throttle_gate_excludes_stopped_and_reverse()
     always_active_includes_stopped_but_not_reverse()
     correction_is_clamped()
+    calibrated_span_allows_full_range_assist()
     correction_slew_limits_steps_and_reversals()
     production_tuning_avoids_abrupt_correction()
     yaw_sign_flips_sensor_mapping()

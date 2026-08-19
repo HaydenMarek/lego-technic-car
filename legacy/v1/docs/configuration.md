@@ -28,7 +28,7 @@ files.
 | Drift yaw rate | 180 | 120 |
 | Yaw-rate deadband | 2 | 8 |
 | Filter alpha | 0.65 | 0.25 |
-| Maximum assist correction | 40 degrees | 12 degrees |
+| Maximum assist correction | Full calibrated steering span | 12 degrees |
 | Correction slew per 20 ms frame | 5 degrees | 24 degrees |
 
 ## Bench operation
@@ -70,13 +70,15 @@ Throttle shaping happens after UART parsing. Steering shaping happens before
 limit mapping and assist.
 
 The Hub IMU supplies rate-only drift stabilization with proportional, filtered,
-slew-limited correction and no integral term. Production correction is capped
-at 40 degrees and can change by at most 5 degrees per 20 ms control frame. The
-bounded authority and 250 deg/s target slew prevent abrupt full-lock reversals
-while retaining counter-steer for a sustained yaw event. Production assist
-starts after calibration; reverse disables it and clears state. With the
-production car unarmed and joystick centered, rotating it clockwise should
-steer wheels counterclockwise; otherwise set `YAW_SIGN = -1`.
+slew-limited correction and no integral term. Production correction can cross
+the full calibrated steering span, allowing the assist to reach either end stop
+from any driver target; the resulting target remains clamped to the calibrated
+limits. Correction changes by at most 5 degrees per 20 ms control frame, so the
+250 deg/s target slew prevents abrupt full-lock reversals while retaining full
+counter-steer authority for a sustained yaw event. Production assist starts
+after calibration; reverse disables it and clears state. With the production
+car unarmed and joystick centered, rotating it clockwise should steer wheels
+counterclockwise; otherwise set `YAW_SIGN = -1`.
 
 ## Verification and CI
 
@@ -91,10 +93,12 @@ and `atmelavr@5.3.0`.
 
 The profile-contract check is distinct from behavior tests: it resolves
 PlatformIO's effective flags (including inherited settings), checks the exact
-Arduino and Hub profile defaults above, and proves that a temporary changed
-throttle exponent is rejected. Native and Python tests then exercise motor and
-Hub control behavior. The host Python tests import [`hub/control.py`](../hub/control.py),
-the same pure control module used by both Hub programs.
+Arduino and Hub profile defaults above, verifies that each Hub entry point is
+self-contained, and proves that a temporary changed throttle exponent is
+rejected. Native and Python tests then exercise motor and Hub control behavior.
+The host Python tests extract the pure control definitions from
+[`hub/main.py`](../hub/main.py) without importing or running Pybricks APIs, so
+they test the production code that is deployed to the Hub.
 
 When an approved profile change is intentional, update this table,
 [`platformio.ini`](../platformio.ini), the relevant Hub program, and the exact
