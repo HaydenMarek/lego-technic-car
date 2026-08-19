@@ -2,6 +2,14 @@
 .pio/
 compile_commands.json
 
+# ESP-IDF generated dependencies and per-build configuration
+managed_components/
+sdkconfig
+sdkconfig.old
+sdkconfig.*
+!sdkconfig.defaults
+!sdkconfig.defaults.*
+
 # Generated and machine-local VS Code settings
 .vscode/*
 !.vscode/extensions.json

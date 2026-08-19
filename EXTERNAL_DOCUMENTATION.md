@@ -17,6 +17,9 @@
 - [Infineon BTS 7960B/P datasheet](https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf)
   — chip-level PWM and protection reference only. It does not validate an
   IBT-2 clone's wiring, thermal performance, or 3.3 V logic threshold.
+- [ESP-IDF Component Manager FAQ](https://docs.espressif.com/projects/idf-component-manager/en/latest/troubleshooting/faq.html)
+  — version-control guidance for generated `managed_components/` content and
+  the reproducibility role of `dependencies.lock`.
 
 No servo, Technic adapter, or buck converter part number has been selected yet.
 Add the selected components' vendor datasheets here during authorized physical
