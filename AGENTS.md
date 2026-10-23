@@ -81,3 +81,15 @@ description of what it covers and why it is useful).
 
 Use GitHub CLI (`gh`) commands for GitHub operations, including working with
 issues, pull requests, checks, workflows, and releases.
+
+## Session shorthand
+
+When the owner says "yeet", finish the most recent piece of work as a unit:
+
+1. Update the normative documentation for that work, normally `README.md` and
+   the `docs/` files it links, so it matches the implemented behavior. Follow
+   the Definition of done for any conflict; "yeet" does not resolve one.
+2. Run the relevant validation and report its results by evidence category.
+3. Commit only the files for that work, with a descriptive message. Do not
+   stage untracked files that are outside the work, secrets, `.env` files, or
+   build outputs. Do not push unless the owner asks.
