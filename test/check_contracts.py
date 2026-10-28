@@ -54,7 +54,7 @@ def effective_environment_flags(project_dir: Path) -> dict[str, set[str]]:
 
     resolved = dict(json.loads(output))
     result: dict[str, set[str]] = {}
-    for environment in ("env:uno_bench", "env:uno_bts7960"):
+    for environment in ("env:uno_bench", "env:uno_bts7960", "env:nano_bench"):
         values = dict(resolved[environment])
         result[environment] = {
             flag for flag in values["build_flags"] if flag.startswith("-D")
@@ -80,6 +80,8 @@ def validate_profiles(project_dir: Path) -> None:
             "-DTECHNIC_RC_THROTTLE_CURVE_EXPONENT=1",
         },
     }
+    # The Nano bring-up profile must stay identical to the UNO bench profile.
+    expected_profiles["env:nano_bench"] = expected_profiles["env:uno_bench"]
     for environment, expected in expected_profiles.items():
         actual = flags_by_environment[environment]
         if actual != expected:

@@ -167,10 +167,7 @@ controller = XboxController()
 async def require_bench_firmware():
     """Refuse to run if Arduino has real motor outputs enabled."""
 
-    uart.clear()
-    await uart.write("MODE\n")
-    await uart.wait_until(b"MODE,BENCH")
-    uart.clear()
+    await control.open_link(uart, wait, b"MODE,BENCH")
 
 
 async def calibrate_steering():

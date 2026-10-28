@@ -1,11 +1,34 @@
 # Migration guide: Arduino UNO to Arduino Nano clone
 
 **Status: non-normative.** This guide supports goal G1 in [GOALS.md](GOALS.md),
-which is not yet approved for implementation. It does not change the documented
-hardware revision. The [repository README](README.md) and
-[hardware and safety](docs/hardware.md) remain authoritative. The Nano build
-environments and documentation updates described below do not exist yet. They
-must be approved and made together with the normative documents.
+which the owner approved for implementation on 2026-10-28. It does not change
+the documented hardware revision, which is still the UNO. The
+[repository README](README.md) and [hardware and safety](docs/hardware.md)
+remain authoritative. Each further step must update the normative documents in
+the same change.
+
+## Progress
+
+Work is split into small stages that are each tested on the hardware before the
+next one. Detailed findings and evidence are in [KNOWLEDGE.md](KNOWLEDGE.md).
+
+| Stage | Scope | Status (2026-10-28) |
+| --- | --- | --- |
+| 0 | `nano_bench` PlatformIO profile, contract check, docs | Done: host-side `./test/verify.sh` passes |
+| 1 | `nano_bench` on the Nano over USB only (guide step 5) | Done: `PING`, `MODE`, `D,50`, `STOP` correct (device communication) |
+| 2 | Hub port C cable moved to the Nano (guide step 6, UART wires only) | Done: continuity checked; Nano powered from laptop USB |
+| 3 | Hub ↔ Nano link with [`hub/link_test.py`](hub/link_test.py) | Done: both directions pass, including a cold Hub start |
+| 4 | Watchdog failsafe over the real link | Done: `MOTOR,0` and `FAILSAFE` about 500 ms after the Hub goes quiet |
+| — | Link startup fix: `control.open_link()` in `main.py` and `smoke_test.py` | Done in code and host tests; **not yet run on the Hub** |
+| Next | Run `hub/smoke_test.py` with the Nano (steering moves; wheels clear) | Not started |
+| Next | Logic power from the Mini-360 instead of USB (guide steps 1, 7–9) | Not started |
+| Next | `nano_bts7960` profile, BTS7960 wiring, first motor power (guide steps 6 and 10) | Not started |
+
+Open items:
+
+- The UART divider on the owner's build is not the documented 1 kΩ / 2 kΩ;
+  record the actual values in [hardware](docs/hardware.md).
+- The Nano's USB chip is FTDI FT232R, not CH340.
 
 Target parts:
 
@@ -57,10 +80,11 @@ regulated 5 V into `5V`, never into `VIN`.
 
 - Solder the pin headers, or solder wires directly for the smallest fit
   (goal G2, fitting in the battery box).
-- Plug it into USB with **nothing else connected**. USB-C Nano clones nearly
-  always use a CH340 USB-serial chip. Windows 11 usually installs the driver
-  automatically. If no COM port appears in Device Manager under
-  *Ports (COM & LPT)*, install the CH340 driver from WCH.
+- Plug it into USB with **nothing else connected**. Clones use either a
+  CH340 or an FTDI FT232R USB-serial chip; the owner's board is FTDI (USB ID
+  `0403:6001`). Windows 11 usually installs the driver automatically. If no
+  COM port appears in Device Manager under *Ports (COM & LPT)*, install the
+  driver for your chip (WCH for CH340, FTDI VCP for FT232R).
 - Find the port with `pio device list`. On Windows it is `COM5` or similar, not
   the `/dev/ttyUSB0` shown in the README.
 
@@ -171,7 +195,7 @@ not by counting positions.
 
 - **Source inspection only:** the pin mapping follows from the repository pin
   map and wiring documents.
-- **General knowledge, not checked on these boards:** the CH340 USB chip, which
+- **General knowledge, not checked on these boards:** the USB chip on other clones, which
   bootloader the clone has, the Mini-360 trimmer behavior, and the USB 5 V
   diode. These vary between clone batches.
 - **Not built, uploaded, or run.** All hardware behavior in this guide is

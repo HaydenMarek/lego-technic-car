@@ -242,10 +242,7 @@ controller = XboxController()
 async def require_motor_firmware():
     """Refuse to arm unless Arduino has BTS7960 output enabled."""
 
-    uart.clear()
-    await uart.write("MODE\n")
-    await uart.wait_until(b"MODE,BTS7960")
-    uart.clear()
+    await control.open_link(uart, wait, b"MODE,BTS7960")
 
 
 async def calibrate_steering():

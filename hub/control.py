@@ -122,3 +122,33 @@ def map_drive_intent(intent, maximum, neutral_deadband, launch_minimum):
         // (100 - neutral_deadband)
     )
     return -mapped if intent < 0 else mapped
+
+
+async def open_link(uart, wait, expected_mode, settle_ms=500, attempts=3,
+                    timeout_ms=1000, poll_ms=10):
+    """Start the Arduino UART link and confirm the expected MODE reply.
+
+    Switching a Hub port to UART mode after power-on puts a stray byte on the
+    line, so the first command arrives garbled and the Arduino replies ERR.
+    Wait for the port to settle, end that partial line with a lone newline,
+    and retry MODE a bounded number of times. Returns the attempt number that
+    succeeded; raises RuntimeError when no attempt gets expected_mode, so a
+    wrong or silent Arduino still blocks driving.
+
+    uart needs write() (awaitable) and read_all(); wait is an awaitable sleep
+    in milliseconds. Both are passed in so this module stays Pybricks-free.
+    """
+    await wait(settle_ms)
+    await uart.write("\n")
+    await wait(50)
+    for attempt in range(1, attempts + 1):
+        uart.read_all()
+        await uart.write("MODE\n")
+        received = b""
+        for _ in range(timeout_ms // poll_ms):
+            await wait(poll_ms)
+            received += uart.read_all()
+            if expected_mode in received:
+                uart.read_all()
+                return attempt
+    raise RuntimeError("Arduino did not reply " + str(expected_mode))

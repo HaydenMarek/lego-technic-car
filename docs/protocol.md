@@ -14,6 +14,24 @@ Commands are ASCII lines terminated by `\n`.
 | `D,<throttle>` | None by default (optional `ACK,D,<throttle>`) | Applies throttle within the active power limit and refreshes the watchdog. |
 | Invalid input | `ERR` | No state change and no watchdog refresh. |
 
+## Link startup
+
+When a Hub port switches to UART mode after power-on, it puts a stray byte on
+the line, so the first command arrives garbled and the Arduino replies `ERR`.
+Every Hub program must therefore start the link with `control.open_link()` in
+[`hub/control.py`](../hub/control.py) before sending any other command:
+
+1. Wait 500 ms for the port to settle.
+2. Send a lone `\n`. It ends any partial line; the Arduino may answer `ERR`,
+   which is discarded.
+3. Send `MODE` and wait up to 1 s for the program's expected reply. Retry at
+   most three times, then stop the program without driving.
+
+The expected reply is `MODE,BTS7960` for `hub/main.py` and `MODE,BENCH` for
+`hub/smoke_test.py`. A wrong or missing reply must never be accepted.
+[`hub/link_test.py`](../hub/link_test.py) is a standalone diagnostic that uses
+the same settle-and-flush steps and retries `PING` instead.
+
 Throttle is an integer from -100 to 100. The same target drives the single
 bridge and both motors; steering is owned exclusively by the Technic Hub.
 

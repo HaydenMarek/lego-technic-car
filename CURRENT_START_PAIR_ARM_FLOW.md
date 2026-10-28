@@ -19,9 +19,9 @@ flowchart TD
     arduinoBoot["Arduino boots<br/>- Motor driver initialized stopped/coasting<br/>- Vehicle stopped<br/>- Watchdog starts timed out<br/>- Sends READY over UART"] --> hubStart
 
     hubStart["Start hub/main.py"] --> xbox["XboxController() waits for controller connection<br/>First run: controller pairing happens here<br/>Later runs: auto-connect"]
-    xbox --> modeRequest["Hub clears UART buffer<br/>and sends MODE"]
+    xbox --> modeRequest["control.open_link(): wait 500 ms,<br/>send lone newline, send MODE<br/>(up to 3 attempts)"]
     modeRequest --> modeReply{"Arduino replies<br/>MODE,BTS7960?"}
-    modeReply -- no / timeout --> exitEarly["Program exits via finally<br/>Arduino remains stopped<br/>Watchdog is fallback"]
+    modeReply -- no after 3 attempts --> exitEarly["Program exits via finally<br/>Arduino remains stopped<br/>Watchdog is fallback"]
     modeReply -- yes --> initialStop["Hub sends STOP<br/>waits 100 ms; drains UART"]
 
     initialStop --> calibration["Steering calibration while drive is stopped<br/>1. Run to left stall at limited duty<br/>2. Wait 250 ms<br/>3. Run to right stall at limited duty<br/>4. Validate travel and limits<br/>5. Move to midpoint and reset angle to zero"]
@@ -79,7 +79,8 @@ flowchart TD
 Notes:
 
 - The `READY` packet is informational in the present Hub programs: neither Hub
-  program waits for it. Each instead sends `MODE` and waits for the matching
+  program waits for it. Each instead starts the link with `control.open_link()`
+  ([link startup](docs/protocol.md#link-startup)) and waits for the matching
   response, so startup succeeds if the Arduino has already finished booting.
 - The production `STOP` packets continue throughout the unarmed loop. They
   also clear current protection each frame; therefore an Arduino current fault
@@ -105,7 +106,7 @@ Notes:
 
 ```mermaid
 flowchart TD
-    start["Start hub/smoke_test.py<br/>XboxController() connects/pairs"] --> mode["Send MODE; require MODE,BENCH"]
+    start["Start hub/smoke_test.py<br/>XboxController() connects/pairs"] --> mode["control.open_link(); require MODE,BENCH"]
     mode --> stop["Send STOP; wait 100 ms"]
     stop --> calibrate["Calibrate and center steering"]
     calibrate --> imu["Optional IMU-settle wait and assist setup"]

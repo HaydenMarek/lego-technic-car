@@ -11,7 +11,7 @@ together with the change.
 
 | # | Goal | Status |
 | ---: | --- | --- |
-| G1 | Replace the Arduino UNO with a smaller Arduino-compatible board, such as an Arduino Nano, so the controller is physically smaller. | Proposed; not approved for implementation |
+| G1 | Replace the Arduino UNO with a smaller Arduino-compatible board, such as an Arduino Nano, so the controller is physically smaller. | Approved 2026-10-28; in progress. Hub ↔ Nano UART link verified; see [migration progress](MIGRATION_UNO_TO_NANO.md#progress) |
 | G2 | Fit all additional electronics for the vehicle (controller, BTS7960 driver, logic power, and wiring) inside the battery box of the LEGO Technic powered hub. | Proposed; fit not yet measured |
 | G3 | Keep the vehicle's safety behavior at least as strong as it is today when the controller changes. | Standing requirement |
 
@@ -38,7 +38,7 @@ own safety review before motor power is applied.
 
 ## Owner decisions needed
 
-- Approve G1 for implementation, or keep it exploratory.
+- G1 approved for implementation on 2026-10-28.
 - Provide the battery-box and component dimensions for G2.
 - Confirm whether a new hardware revision should replace the current
   documented revision in [hardware](docs/hardware.md) once it is built.

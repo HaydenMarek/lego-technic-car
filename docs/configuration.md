@@ -41,6 +41,10 @@ pio run -e uno_bench --target upload --upload-port /dev/ttyUSB0
 pio device monitor --port /dev/ttyUSB0 --baud 115200 --eol LF --echo
 ```
 
+For an Arduino Nano clone (new bootloader), use `nano_bench` instead. It
+extends `uno_bench` and changes only the board, so its flags are identical.
+On Windows the port is `COMn`, not `/dev/ttyUSB0`.
+
 With LF line endings, try `PING`, `MODE`, `D,50`, `D,-25`, and `STOP`. For
 `D,50`, the linear curve targets 50% output and the temporary driver ramps
 through `MOTOR,20`, `MOTOR,40`, and `MOTOR,50`. After 500 ms it prints
@@ -84,10 +88,15 @@ steer wheels counterclockwise; otherwise set `YAW_SIGN = -1`.
 ./test/verify.sh
 ```
 
-This checks documentation, native C++ and Python controls, and both firmware
-profiles without accessing hardware. `./test/verify.sh --remote-links` also
-resolves HTTP(S) Markdown links. CI pins Python 3.12, PlatformIO Core 6.1.19,
-and `atmelavr@5.3.0`.
+This checks documentation, native C++ and Python controls, and all firmware
+profiles (`uno_bench`, `uno_bts7960`, `nano_bench`) without accessing hardware.
+`./test/verify.sh --remote-links` also resolves HTTP(S) Markdown links. CI pins
+Python 3.12, PlatformIO Core 6.1.19, and `atmelavr@5.3.0`.
+
+Local prerequisites are Python 3, PlatformIO Core (`pio`), and a host `g++`
+with C++17 support, all on `PATH`. The scripts use `python3` when it runs and
+fall back to `python` (the name the python.org Windows installer provides). On
+Windows, the WinLibs MinGW-w64 GCC provides `g++`.
 
 The profile-contract check is distinct from behavior tests: it resolves
 PlatformIO's effective flags (including inherited settings), checks the exact

@@ -33,6 +33,12 @@ and the [start/pair/arm flow](CURRENT_START_PAIR_ARM_FLOW.md) are descriptive.
 | --- | --- | --- | --- |
 | Smoke test | [`hub/smoke_test.py`](hub/smoke_test.py) | `uno_bench` | Serial `MOTOR,...` diagnostics only |
 | Production drive | [`hub/main.py`](hub/main.py) | `uno_bts7960` | PWM output to the BTS7960 |
+| Nano bring-up | [`hub/smoke_test.py`](hub/smoke_test.py) | `nano_bench` | Same as smoke test, on an Arduino Nano clone |
+| UART link test | [`hub/link_test.py`](hub/link_test.py) | `uno_bench` or `nano_bench` | `PING`/`MODE`/`STOP` replies on the Hub, `MOTOR,...` and failsafe on USB; no motors or controller |
+
+`nano_bench` is the bench profile built for an ATmega328P Nano clone with the
+new bootloader. It uses the same pins as the UNO. The documented vehicle
+revision is still the UNO; there is no Nano production profile yet.
 
 ### Smoke test
 
