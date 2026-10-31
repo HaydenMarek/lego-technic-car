@@ -25,6 +25,6 @@ else
 fi
 "$project_dir/test/run-native-tests.sh"
 "$project_dir/test/run-python-tests.sh"
-pio run --project-dir "$project_dir" -e uno_bench -e uno_bts7960 -e nano_bench
+pio run --project-dir "$project_dir" -e uno_bench -e uno_bts7960 -e nano_bench -e nano_bts7960 -e nano_bts7960_noprot
 
 echo "Full non-hardware verification passed"

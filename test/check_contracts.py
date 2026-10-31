@@ -54,7 +54,7 @@ def effective_environment_flags(project_dir: Path) -> dict[str, set[str]]:
 
     resolved = dict(json.loads(output))
     result: dict[str, set[str]] = {}
-    for environment in ("env:uno_bench", "env:uno_bts7960", "env:nano_bench"):
+    for environment in ("env:uno_bench", "env:uno_bts7960", "env:nano_bench", "env:nano_bts7960", "env:nano_bts7960_noprot"):
         values = dict(resolved[environment])
         result[environment] = {
             flag for flag in values["build_flags"] if flag.startswith("-D")
@@ -82,6 +82,11 @@ def validate_profiles(project_dir: Path) -> None:
     }
     # The Nano bring-up profile must stay identical to the UNO bench profile.
     expected_profiles["env:nano_bench"] = expected_profiles["env:uno_bench"]
+    expected_profiles["env:nano_bts7960"] = expected_profiles["env:uno_bts7960"]
+    expected_profiles["env:nano_bts7960_noprot"] = (
+        expected_profiles["env:uno_bts7960"]
+        - {"-DTECHNIC_RC_ENABLE_CURRENT_PROTECTION=1"}
+    ) | {"-DTECHNIC_RC_ENABLE_CURRENT_PROTECTION=0"}
     for environment, expected in expected_profiles.items():
         actual = flags_by_environment[environment]
         if actual != expected:

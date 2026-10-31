@@ -89,7 +89,7 @@ steer wheels counterclockwise; otherwise set `YAW_SIGN = -1`.
 ```
 
 This checks documentation, native C++ and Python controls, and all firmware
-profiles (`uno_bench`, `uno_bts7960`, `nano_bench`) without accessing hardware.
+profiles (`uno_bench`, `uno_bts7960`, `nano_bench`, `nano_bts7960`, `nano_bts7960_noprot`) without accessing hardware.
 `./test/verify.sh --remote-links` also resolves HTTP(S) Markdown links. CI pins
 Python 3.12, PlatformIO Core 6.1.19, and `atmelavr@5.3.0`.
 
