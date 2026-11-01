@@ -1,79 +1,95 @@
-# Knowledge
+# KNOWLEDGE
 
-Verified findings about the hardware and toolchain. Each entry states its
-evidence category and date. This file is non-normative; `README.md` remains
-the specification.
+What we learned from the first build (Arduino UNO/Nano + LEGO Technic Hub).
+Only things that still apply to the Pico 2 W build are kept here.
+How the car should drive is in [DRIVING.md](DRIVING.md).
 
-## Arduino Nano clone (USB-C, ATmega328P)
+The old code and docs are in git tag `legacy-arduino-hub`:
 
-First bring-up, 2026-10-28.
+```sh
+git checkout legacy-arduino-hub   # look around
+git checkout main                 # come back
+```
 
-| Finding | Evidence |
-| --- | --- |
-| Out of the box: red power LED steady, `L` LED (D13) blinking once per second, which is the factory `Blink` sketch. | Observed hardware behavior |
-| Enumerates on Windows as a generic USB serial port (`COM11` on the owner's laptop), board shown as "Unknown" by `arduino-cli board list`. The USB ID is `0403:6001` (FTDI FT232R USB-serial chip, not CH340); clones report no Arduino board ID. | Device communication (`pio device list`, 2026-10-28) |
-| Has the **new (Optiboot) bootloader**: upload works with FQBN `arduino:avr:nano` (115200 baud). The `cpu=atmega328old` fallback was not needed. PlatformIO equivalent: `board = nanoatmega328new`. | Device communication (successful upload) |
-| A heartbeat test sketch (two 80 ms flashes, 120 ms apart, then ~720 ms rest) ran as uploaded. | Observed hardware behavior (confirmed by owner) |
+## Motors and BTS7960
 
-The COM port number is specific to the laptop and USB socket; re-check it with
-`arduino-cli board list`.
+- One BTS7960 (IBT-2 board) drives **both** buggy motors.
+- The motors sit side by side, mirrored. Wire them with **opposite polarity**:
+  motor 1 to `M+`/`M-`, motor 2 to `M-`/`M+`. Then one bridge is enough.
+- The car drove backwards with the motors as installed. The old code used
+  `DRIVE_DIRECTION = -1`. Fix direction in code, not by swapping wires live.
+- Terminal order differs between clone boards. Follow the PCB labels.
 
-### Toolchain
+| BTS7960 pin | Job | Notes |
+|---|---|---|
+| `RPWM` | PWM, one direction | |
+| `LPWM` | PWM, other direction | |
+| `R_EN`, `L_EN` | Enable both halves | Add 10 kΩ pull-downs to GND, so the bridge is off while the controller boots. |
+| `R_IS`, `L_IS` | Current sense | Analog. Add 300 Ω to GND on each (see below). |
+| `VCC` | Logic supply | Never connect battery voltage here. |
+| `GND` | Common ground | |
+| `B+`, `B-` | Battery | `B+` through the main switch. |
 
-- `arduino-cli` is installed at `C:\Program Files\Arduino CLI`.
-- AVR core installed: `arduino-cli core install arduino:avr` (1.8.8).
-- Build and upload in one step:
+## Current sense (`R_IS`, `L_IS`)
 
-  ```sh
-  arduino-cli compile -b arduino:avr:nano -u -p COM11 <sketch-folder>
-  ```
+- The board has 10 kΩ from each IS pin to GND (measured).
+- We added 300 Ω from each IS pin to GND, about 291 Ω in total.
+- Rough scale: 0.49 V on IS was about 14 A of motor current. Only use this
+  as a guide; accuracy is poor.
+- Both channels can also signal a fault, so watch both while driving.
 
-  The sketch folder name must match its `.ino` file name.
+Measured during wheelspin, with the limits we used (peak + 10 %):
 
-### Stage 1: `nano_bench` firmware over USB (2026-10-28)
+| Channel | Peak seen | Limit used | Limit on Pico ADC (12-bit, 3.3 V) |
+|---|---|---|---|
+| `L_IS` | 0.49 V | 0.55 V | ~680 counts |
+| `R_IS` | 0.24 V | 0.27 V | ~333 counts |
 
-USB only, nothing else connected. `pio run -e nano_bench --target upload
---upload-port COM11` wrote and verified 6328 bytes. A scripted serial session
-(115200 baud, LF) got the boot banner (`serial bench mode`, `Current
-protection: OFF`), `PING` → `PONG`, `MODE` → `MODE,BENCH`, `D,50` →
-`MOTOR,20/40/50` then `MOTOR,0` and `FAILSAFE: vehicle stopped`, and `STOP` →
-`ACK,STOP`. Evidence: device communication. The Hub link is not yet tested.
+- Forward drive showed mostly on `L_IS`, reverse on `R_IS`.
+- Measure again on the new build before trusting these numbers.
 
-### Toolchain on the owner's laptop
+## Power
 
-- Python 3.13 (python.org via winget; provides `python`, not `python3`),
-  PlatformIO Core 6.2.0 (`pip --user`), and WinLibs GCC 16.2 for the native
-  tests. `./test/verify.sh` passes locally.
+- Battery: 2S Li-ion, 7.4 V nominal, 8.4 V full.
+- Give the logic its own 5 V buck converter. Do not run logic from the motor
+  wires.
+- **Hard starts reset the controller.** Fixed with a 470–1000 µF
+  electrolytic (≥ 10 V) plus a 100 nF ceramic right at the controller's
+  power pins, with short leads. Check you get ~5.0 V under load.
+- Never send motor current through a breadboard or controller board traces.
+- All grounds must be common.
 
-### Stage 3–4: Hub ↔ Nano UART link (2026-10-28)
+## Safety rules
 
-Hub port C cable moved to the Nano (pin 3 → GND, pin 5 → D10, pin 6 → D11
-through the owner's divider, not the documented 1 kΩ / 2 kΩ values). Nano on
-laptop USB, Hub on its own batteries, no motors.
+- Wheels off the ground for bench tests.
+- Power on: logic first, motor power last. Power off: motor power first.
+- Keep a physical motor-power switch within reach.
+- If a motor or wire gets hot, cut power.
+- There is **no fuse** and no independent current protection yet
+  ([issue #11](https://github.com/HaydenMarek/lego-technic-car/issues/11)).
+  The BTS7960's built-in protection is not enough on its own.
+- Not built yet: battery voltage monitoring, low-voltage cutoff,
+  temperature sensing.
 
-| Finding | Evidence |
-| --- | --- |
-| `hub/link_test.py` passes: `PONG`, `MODE,BENCH`, and `ACK,STOP` reach the Hub; `D,20`/`D,-20` frames at 20 ms appear on Nano USB as `MOTOR,...`. | Device communication |
-| After the Hub stops sending, the Nano reports `MOTOR,0` and `FAILSAFE` about 500 ms later over the real link. | Device communication (USB log) |
-| The first command after **Hub power-on** arrives garbled: `PING` got `ERR\r\n`. Later runs without a power cycle pass. Switching port C to UART mode puts a stray byte on the line. | Device communication, repeated |
-| Waiting 500 ms and sending a lone `\n` before the first command fixes it: cold start passed on attempt 1. | Device communication (cold start) |
+## What changes on the Pico 2 W (not yet checked)
 
-## Rule for Hub programs: start the UART link with `control.open_link()`
+| Topic | Old build | Pico 2 W: check this |
+|---|---|---|
+| Logic level | 5 V | Pico outputs 3.3 V. The IBT-2 board buffers inputs with a 74HC chip powered from `VCC`. At `VCC` = 5 V, 3.3 V is a borderline "high". Try `VCC` = 3.3 V, or test it. |
+| ADC | 10-bit, 5 V | 12-bit, 3.3 V max. Only GP26, GP27, GP28 are free ADC pins. Keep the 300 Ω on IS so it stays under 3.3 V. Measure first. |
+| Power in | 5 V pin | Feed 5 V into `VSYS`. Use a Schottky diode if USB may be plugged in at the same time (see Pico datasheet). |
+| Servo | (LEGO motor steered) | Servo current spikes can brown out the 5 V rail. Same capacitor fix as above may be needed. |
 
-Applies to every current and future Hub program that talks to the Arduino,
-with either board.
+## Useful links
 
-- **Problem:** the first command after Hub power-on arrives garbled (stray
-  byte from the port switching to UART mode). A program that sends `MODE`
-  once and waits can fail or hang on a cold start, while a second run works.
-- **Fix:** call `await control.open_link(uart, wait, b"MODE,...")` before any
-  other command. It waits 500 ms, sends a lone `
-` to end the garbled line,
-  then retries `MODE` up to three times and raises if the reply is wrong.
-- **Symptom to recognize:** red/failed only on the first run after switching
-  the Hub on, with `ERR` as the reply.
-- `hub/main.py` and `hub/smoke_test.py` use it; `test/test_link.py` checks it
-  on the host with a fake Arduino that sends the stray byte. The normative
-  rule is in [docs/protocol.md](docs/protocol.md#link-startup).
-- `main.py` and `smoke_test.py` with this change are host-tested only, not yet
-  run on the Hub.
+- [Infineon BTS7960 datasheet](https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf):
+  PWM limits (pp. 11), protection and current sense (pp. 13–17), layout (p. 22).
+  Chip only. It says nothing about the IBT-2 clone board.
+
+## Tools on this laptop
+
+- Python 3.13, PlatformIO Core 6.2, arduino-cli 1.5.1
+  (`C:\Program Files\Arduino CLI`).
+- arduino-cli has the AVR and ESP32 cores. The Pico core
+  ([arduino-pico](https://github.com/earlephilhower/arduino-pico)) is not
+  installed yet.

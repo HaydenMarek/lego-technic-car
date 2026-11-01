@@ -1,76 +1,30 @@
-# LEGO Technic RC Vehicle Controller
+# raspberry-lego-technic
 
-![LEGO Technic RC vehicle](archive/technic-rc-car.png)
+A LEGO Technic RC car controlled by a Raspberry Pi Pico 2 W.
 
-Firmware for an Arduino UNO between a LEGO Technic Hub and one BTS7960 motor
-driver. The two side-by-side buggy motors share the bridge with opposite
-polarity, so they spin in opposite directions.
+## How it works
 
-> [!WARNING]
-> This documented vehicle revision has **no independent system-level hardware
-> current protection**: no externally rated fuse, independent protection
-> circuit, or automatic vehicle-level motor-power cutoff. The BTS7960 driver IC
-> has integrated device-level protections, but they are not a substitute for
-> independent vehicle protection. Firmware foldback and the driver IC cannot
-> protect against every Arduino crash, wiring fault, incorrect calibration, or
-> power-stage failure. Read [hardware safety](docs/hardware.md#power-safety)
-> before applying motor power.
+- An Xbox Elite Series 2 controller connects to the Pico 2 W over Bluetooth ([Bluepad32](https://github.com/ricardoquesada/bluepad32)).
+- A servo steers.
+- Buggy motors (unofficial) drive the car through a BTS7960 H-bridge.
+- An MPU6500 gyro helps steering during drifts.
 
-## Start here
+![Block diagram: MPU6500 gyro feeds the Pico 2 W, which drives the steering servo and, through the BTS7960 H-bridge, the buggy motors](assets/top-level-graph.png)
 
-1. Read [hardware and safety](docs/hardware.md).
-2. Use one of the paired Hub and Arduino profiles below; do not mix them.
-3. Run `./test/verify.sh` for a non-hardware completion check.
+## Parts
 
-The [UART protocol](docs/protocol.md), [configuration](docs/configuration.md),
-and [hardware](docs/hardware.md) are normative. [Architecture](docs/architecture.md)
-and the [start/pair/arm flow](CURRENT_START_PAIR_ARM_FLOW.md) are descriptive.
-[Plans](docs/plans/README.md) are non-normative.
+| Part | Job | Have it? |
+|------|-----|----------|
+| [Raspberry Pi Pico 2 W](https://www.raspberrypi.com/products/raspberry-pi-pico-2/) (or Pico 2 WH, headers soldered) | Main controller | No (~7–8 €) |
+| Xbox Elite Series 2 | Remote control | Yes |
+| [Servo](https://www.aliexpress.com/item/1005009082748156.html) | Steering | Yes |
+| [BTS7960 H-bridge](https://techfun.sk/produkt/vykonny-motor-driver-43a-h-bridge-bts7960/) | Drives the motors | Yes |
+| Buggy motors | Drive | TBD |
+| [MPU6500 6DOF](https://techfun.sk/produkt/akcelerometer-gyroskop-mpu6500-6dof/) | Gyro for drift steering assist | No (2.70 €, buy 2) |
 
-## Supported program pairs
+## Docs
 
-| Use | Hub program | Arduino profile | Result |
-| --- | --- | --- | --- |
-| Smoke test | [`hub/smoke_test.py`](hub/smoke_test.py) | `uno_bench` | Serial `MOTOR,...` diagnostics only |
-| Production drive | [`hub/main.py`](hub/main.py) | `uno_bts7960` | PWM output to the BTS7960 |
-| Nano bring-up | [`hub/smoke_test.py`](hub/smoke_test.py) | `nano_bench` | Same as smoke test, on an Arduino Nano clone |
-| Nano production drive | [`hub/main.py`](hub/main.py) | `nano_bts7960` | Same as production drive, on an Arduino Nano clone |
-| Nano bench diagnostic | [`hub/main.py`](hub/main.py) | `nano_bts7960_noprot` | `nano_bts7960` with current protection disabled; wheels off the ground only, never for driving |
-| UART link test | [`hub/link_test.py`](hub/link_test.py) | `uno_bench` or `nano_bench` | `PING`/`MODE`/`STOP` replies on the Hub, `MOTOR,...` and failsafe on USB; no motors or controller |
+- [KNOWLEDGE.md](KNOWLEDGE.md): wiring, power and safety lessons from the first build.
+- [DRIVING.md](DRIVING.md): arming, throttle, ramps, failsafe and drift assist.
 
-`nano_bench` is the bench profile built for an ATmega328P Nano clone with the
-new bootloader. It uses the same pins as the UNO. The documented vehicle
-revision is still the UNO. `nano_bts7960` is the matching production profile
-for the Nano, with the same flags as `uno_bts7960`; it has not yet been
-validated on hardware.
-
-### Smoke test
-
-```sh
-pio run -e uno_bench
-pio run -e uno_bench --target upload --upload-port /dev/ttyUSB0
-pio device monitor --port /dev/ttyUSB0 --baud 115200 --eol LF --echo
-```
-
-Set the monitor to LF, then send `PING`, `MODE`, `D,50`, `D,-25`, and `STOP`.
-See [bench operation](docs/configuration.md#bench-operation) for constraints.
-
-### Production drive
-
-```sh
-pio run -e uno_bts7960
-pio run -e uno_bts7960 --target upload --upload-port /dev/ttyUSB0
-```
-
-Follow [production operation](docs/configuration.md#production-operation) and
-[hardware safety](docs/hardware.md#power-safety) before applying motor power.
-
-## Verification
-
-```sh
-./test/verify.sh
-```
-
-This validates links, configuration contracts, host-side controls, and both
-firmware builds. It does not access physical hardware. Details are in
-[verification and CI](docs/configuration.md#verification-and-ci).
+Toolchain: Arduino IDE with the [Earle Philhower Pico core](https://github.com/earlephilhower/arduino-pico), or the Pico SDK.

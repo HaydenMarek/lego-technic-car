@@ -1,26 +1,20 @@
-# PlatformIO build output
+# Build output
+build/
 .pio/
-compile_commands.json
+*.uf2
+*.elf
+*.hex
+*.bin
 
-# Generated and machine-local VS Code settings
+# Editor and OS
 .vscode/*
 !.vscode/extensions.json
-
-# Python caches and test output
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Local environment files
-.env
-.env.*
-!.env.example
-
-# Editor and operating-system files
 *.swp
-*.swo
 *~
 .DS_Store
 Thumbs.db
+
+# Local secrets
+.env
+.env.*
+!.env.example

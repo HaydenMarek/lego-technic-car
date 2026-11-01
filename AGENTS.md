@@ -1,72 +1,37 @@
-# Agent guidance
+# AGENTS
 
-`README.md` is the specification. Read it before changing anything, and make
-sure the implementation matches what it describes. If they diverge, reconcile
-them before finishing.
+Rules for AI agents in this repo. `CLAUDE.md` just points here.
 
-## Definition of done
+## Markdown files
 
-- For every approved behavior, constraint, or configuration decision, update
-  the normative documentation, normally `README.md`. This is required whatever
-  the wording of the request.
-- Add or update focused tests when the change can be checked in software.
-- Before handoff, run `./test/verify.sh` when its toolchain is available.
-  Otherwise run the focused checks and say why the full check did not run.
-- The handoff separates host-side, build, or simulated results from
-  real-hardware validation, and names any hardware behavior still unverified.
-- When tracked work is complete, update its tracking document and GitHub issue
-  to match the acceptance criteria.
+- File names are ALL CAPS: `README.md`, `WIRING.md`. Not `notes.md`.
+- Write as simply as possible, so a person can read it quickly:
+  - Short sentences, plain words.
+  - Lists and tables instead of long paragraphs.
+  - Only what is needed. No filler.
 
-**Conflicts.** An explicit user request is the decision to implement. Update
-the implementation and the normative docs together. If the README and the code
-conflict and no approved decision resolves it, stop and ask the owner which is
-authoritative. Do not silently choose one.
+## Before you start
 
-## Physical hardware boundaries
+- Read [KNOWLEDGE.md](KNOWLEDGE.md) and [DRIVING.md](DRIVING.md).
+- Old Arduino/Hub code is in git tag `legacy-arduino-hub`. Use it for
+  reference only.
 
-Treat local builds, static analysis, unit tests, contract checks, and
-`./test/verify.sh` as non-hardware validation. They do not authorize, imply,
-or prove a physical result.
+## Real hardware
 
-Firmware uploads (and their automatic device resets), serial-monitor sessions,
-and any command that communicates with an attached Arduino or Hub require
-explicit user authorization for that exact operation. Do not infer that
-authorization from a request to build, test, diagnose, or change firmware.
-Read-only device discovery (for example, listing attached serial devices) is
-allowed only when relevant to the task and safe in the known power state. It
-does not authorize opening, resetting, uploading to, or controlling a device.
+- Building and tests on the PC never prove the car works.
+- **Ask first** before you upload firmware, open a serial monitor, or talk
+  to the Pico in any other way. Asking to "build" or "fix" is not permission.
+- Before anything that can move the motors or servo, check with the owner:
+  wheels are clear, power state is known, motor-power switch is in reach.
+- Keep motor power off for uploads unless the task needs it.
+- Say how you know something works. Use one of: read the code, test on PC,
+  firmware builds, Pico replied, seen on the car. Never call a build or a log
+  "seen on the car".
 
-Before any authorized operation that can move steering or energize a motor,
-confirm that the wheels are clear, the current power state is known, and a
-physical motor-power cutoff is accessible. Keep motor power disconnected for
-uploads and serial work unless that operation requires it. Ask the user to
-perform or confirm any physical setup you cannot observe.
+## Finishing work
 
-Report validation by evidence category: source inspection, host-side test,
-firmware build, device communication, or observed hardware behavior. Never
-present compilation, simulation, logs, or source inspection as an observed
-hardware result. State hardware behavior that was not physically verified.
-
-## External documentation
-
-Before starting a task, check `EXTERNAL_DOCUMENTATION.md` and fetch the links
-relevant to your area. Use them to verify assumptions about third-party APIs,
-hardware, and protocols. When you find a useful new resource, append it there
-with a short note on what it covers and why it helps.
-
-## GitHub
-
-Use the GitHub CLI (`gh`) for issues, pull requests, checks, workflows, and
-releases.
-
-## Session shorthand
-
-When the owner says "yeet", finish the most recent piece of work as a unit:
-
-1. Update its normative documentation, per the definition of done.
-2. Run the relevant validation and report results by evidence category.
-3. Commit only that work's files with a descriptive message. Leave out
-   untracked files outside the work, secrets, `.env` files, and build outputs.
-   Do not push unless the owner asks.
-
-"Yeet" does not override the conflict rule above.
+- Update the docs in the same change as the code.
+- Add tests for logic that can run on the PC.
+- Use `gh` for GitHub.
+- "yeet" = finish the last piece of work: update docs, run checks, commit
+  only its files. Do not push unless asked.
