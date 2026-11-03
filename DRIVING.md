@@ -37,6 +37,9 @@ build. Start from them, then retune on the new car.
   ```
 
 - Exponent 1 = linear, 3 = even softer around center.
+- **Deadzone first.** The Elite 2 sticks rest up to ~9 % off center
+  ([KNOWLEDGE.md](KNOWLEDGE.md#xbox-controller-bluetooth)). Start with
+  |in| ≤ 10 → 0, then scale 10…100 to 0…100 before the curve. Tune on the car.
 
 ## Motor ramps
 

@@ -28,28 +28,46 @@ Rules for AI agents in this repo. `CLAUDE.md` just points here.
   firmware builds, Pico replied, seen on the car. Never call a build or a log
   "seen on the car".
 
-## Flashing the Pico 2 W
+## Building and flashing the Pico 2 W
 
-Ask first (see above). Then:
+Code is in [firmware/](firmware/README.md): C, Pico SDK, Bluepad32.
+Building and PC tests need no permission. Flashing and serial: ask first
+(see above).
 
-| Step | Command |
+| Step | Command (Git Bash) |
 | --- | --- |
-| Board ID (FQBN) | `rp2040:rp2040:rpipico2w` (arduino-pico core) |
-| Build | `arduino-cli compile --fqbn rp2040:rp2040:rpipico2w --output-dir <sketch>/build <sketch>` |
-| Find picotool | `find ~/AppData/Local/Arduino15/packages/rp2040/tools/pqt-picotool -name picotool.exe` |
+| First clone | `git submodule update --init` |
+| Build | `cd firmware && cmake --preset pico2w && cmake --build --preset pico2w` |
+| PC tests | `cd firmware/tests && cmake --preset host-tests && cmake --build --preset host-tests && ctest --preset host-tests` |
+| picotool | `firmware/.deps/tools-2.1.1/picotool-2.1.1-x64-win/picotool/picotool.exe` |
 | Check board | `picotool info` |
-| Flash | `picotool load -v -x <sketch>/build/<name>.ino.uf2` |
+| Flash | `picotool load -v -x firmware/build/pico2w/car_firmware.uf2` |
 
+- First build downloads Pico SDK 2.1.1 and picotool into `firmware/.deps/`
+  (git-ignored). Needs Arm GNU Toolchain 14.2.Rel1 ([KNOWLEDGE.md](KNOWLEDGE.md#tools-on-this-laptop)).
+- After changing presets or toolchain: `cmake --preset pico2w --fresh`.
 - `-v` checks the flash after writing. `-x` starts the program.
-- Board in BOOTSEL mode: USB ID `2E8A:000F`, no COM port, and often
-  no drive letter on Windows. Use picotool, not a UF2 copy.
-- `arduino-cli upload` without `-p` fails here ("no upload port provided").
-- Program running: USB ID `2E8A:F00F` with a COM port. Then
-  `arduino-cli upload -p COMx --fqbn rp2040:rp2040:rpipico2w <sketch>`
-  should work, with no button press. Not tested yet.
-- Onboard LED is on the CYW43 Wi-Fi chip, not GPIO25. Use `LED_BUILTIN`.
-- A good flash is only "Pico replied". The LED or motors doing the right
-  thing is "seen on the car", and only the owner can confirm that.
+- Do not use the Arduino `picotool` (v2.0.0): too old for SDK 2.1.1.
+
+USB IDs (`Get-PnpDevice -PresentOnly | ? InstanceId -match VID_2E8A`):
+
+| ID | State | Flash with |
+| --- | --- | --- |
+| `2E8A:000F` | BOOTSEL (bootloader). Often no drive letter. | `picotool load` |
+| `2E8A:0009` | Our firmware running. COM port + "Reset" interface. | `picotool load -f` reboots it to BOOTSEL first. Not tested yet. |
+| `2E8A:F00F` | An arduino-pico sketch running | Open its COM port at 1200 baud, close: reboots to BOOTSEL |
+
+Serial monitor:
+
+- Set **DTR** when opening the COM port. Pico SDK USB serial sends nothing
+  without it. Any baud rate.
+- Lines printed before the port opens are lost.
+- The COM number changes between firmwares (COM12, COM13, ...). Check first.
+
+Proof:
+
+- A good flash and serial output are only "Pico replied". The LED or motors
+  doing the right thing is "seen on the car". Only the owner can confirm that.
 
 ## Finishing work
 

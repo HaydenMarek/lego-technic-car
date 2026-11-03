@@ -18,3 +18,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Pico SDK downloaded by CMake (firmware/CMakePresets.json)
+.deps/

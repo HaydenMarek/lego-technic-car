@@ -1,0 +1,28 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "pico2w",
+      "displayName": "Pico 2 W firmware",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/pico2w",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PICO_BOARD": "pico2_w",
+        "PICO_SDK_FETCH_FROM_GIT": "ON",
+        "PICO_SDK_FETCH_FROM_GIT_TAG": { "type": "STRING", "value": "2.1.1" },
+        "PICO_SDK_FETCH_FROM_GIT_PATH": "${sourceDir}/.deps",
+        "PICO_TOOLCHAIN_PATH": "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "pico2w",
+      "configurePreset": "pico2w",
+      "environment": {
+        "CXXFLAGS": "-include cstdint"
+      }
+    }
+  ]
+}

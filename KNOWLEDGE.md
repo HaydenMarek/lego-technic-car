@@ -93,4 +93,43 @@ Measured during wheelspin, with the limits we used (peak + 10 %):
 - arduino-cli has the AVR, ESP32 and Pico cores
   ([arduino-pico](https://github.com/earlephilhower/arduino-pico) 6.3.2,
   `rp2040:rp2040`). Pico 2 W FQBN: `rp2040:rp2040:rpipico2w`.
-- How to flash the Pico: see [AGENTS.md](AGENTS.md#flashing-the-pico-2-w).
+- Firmware toolchain (Pico SDK):
+  - Arm GNU Toolchain 14.2.Rel1 (winget `Arm.GnuArmEmbeddedToolchain`),
+    `C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\14.2 rel1`.
+  - CMake 4.4, Ninja, host gcc 16.2 (WinLibs, winget).
+  - Pico SDK 2.1.1 and picotool 2.1.1: downloaded by CMake into `firmware/.deps/`.
+- How to build and flash: see [AGENTS.md](AGENTS.md#building-and-flashing-the-pico-2-w).
+
+## Firmware build pitfalls (Windows)
+
+Each one cost a failed build. The fix is already in `firmware/`.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `invalid reference: .../firmware/2.1.1` | `pico_sdk_import.cmake` stores the SDK tag as `FILEPATH`, so CMake turns it into a path | Preset sets the tag with `"type": "STRING"` |
+| `'uint8_t' does not name a type` in pioasm | SDK 2.1.1 pioasm + GCC 13 or newer: missing `<cstdint>` | Build preset env `CXXFLAGS=-include cstdint` |
+| Access violation (`0xC0000005`) in `picotool coprodis` | SDK 2.1.1 builds picotool from the unpinned `develop` branch | Prebuilt picotool 2.1.1 from `raspberrypi/pico-sdk-tools` |
+| Download TLS error 60 | WinLibs CMake has no CA bundle | Download with Windows `curl.exe`, then check SHA-256 |
+| `pioasm.exe` vanishes, "cannot execute" | Windows Defender quarantined the prebuilt pioasm (likely false positive) | Let the SDK build pioasm |
+| `undefined reference to __retarget_lock_*` | Arduino's `pqt-gcc` newlib expects the Arduino core to supply locks | Use the Arm GNU Toolchain, not `pqt-gcc` |
+
+## Xbox controller (Bluetooth)
+
+Seen with the Pico 2 W controller test app (2026-11-03). Proof: Pico replied
+(serial log while the owner used the controller).
+
+- Elite Series 2 connects over **BLE**. Bluepad32 log: "Xbox Wireless",
+  "firmware v5.x". Address `14:CB:65:7E:40:EE`. Name comes through empty.
+- Pairing: controller on, hold the pair button (top, next to USB-C) ~3 s
+  until the logo blinks fast. Pico LED: blinks while scanning, steady when
+  connected.
+- Pairing keys stay in Pico flash, so the controller reconnects on its own.
+- Ranges seen: sticks −512…511 on all four axes, triggers 0…1023.
+- **Sticks do not rest at 0.** Seen at rest: left (47, 47) and (45, −32),
+  right about ±43. That is up to ~9 % of full travel. Steering needs a deadzone.
+- Seen working: A, B, X, Y, LB, RB, d-pad, both triggers, both sticks.
+- Not tested yet: stick clicks, View/Menu/Xbox/Share, the disconnect message,
+  rumble, Elite paddles.
+- Arduino-pico's `BluetoothHIDMaster` can't be used: it reads only
+  Generic Desktop axes, but Xbox BLE sends triggers on the Simulation page
+  (`0x02`), so the triggers would be missing.
