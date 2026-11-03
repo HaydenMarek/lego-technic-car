@@ -133,6 +133,12 @@ Seen with the Pico 2 W controller test app (2026-11-03). Proof: Pico replied
 - **Sticks do not rest at 0.** Seen at rest: left (47, 47) and (45, −32),
   right about ±43. That is up to ~9 % of full travel. Steering needs a deadzone.
 - Seen working: A, B, X, Y, LB, RB, d-pad, both triggers, both sticks.
+- **Reports only on change.** Hands still = no reports at all (driving
+  firmware, 2026-11-03, Pico replied). So a failsafe can't use report age.
+  Use the link supervision timeout instead.
+- BTstack default BLE supervision timeout: 720 ms at connect, but it accepts
+  a peripheral's request for up to 32 s. Limit it with
+  `gap_set_connection_parameter_range()`.
 - Not tested yet: stick clicks, View/Menu/Xbox/Share, the disconnect message,
   rumble, Elite paddles.
 - Arduino-pico's `BluetoothHIDMaster` can't be used: it reads only

@@ -19,9 +19,14 @@ struct uni_platform *controller_platform(void);
 // True while a controller is connected and ready.
 bool controller_connected(void);
 
+// Bluetooth link supervision timeout: after this long without any radio
+// packet, the link drops and controller_connected() turns false.
+// This is the failsafe timeout. Report age is NOT: the Xbox controller only
+// sends a report when something changes (seen on the Pico, 2026-11-03).
+#define CONTROLLER_LINK_TIMEOUT_MS 500
+
 // Copies the latest state into *out and the time it arrived
 // (ms since boot) into *updated_ms. Returns false if no controller.
-// Failsafe: treat (now - *updated_ms) > 500 ms as "no input" (DRIVING.md).
 bool controller_latest(pad_state_t *out, uint32_t *updated_ms);
 
 // Print state changes on USB serial (on by default, for testing).

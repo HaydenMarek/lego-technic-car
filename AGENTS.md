@@ -54,7 +54,7 @@ USB IDs (`Get-PnpDevice -PresentOnly | ? InstanceId -match VID_2E8A`):
 | ID | State | Flash with |
 | --- | --- | --- |
 | `2E8A:000F` | BOOTSEL (bootloader). Often no drive letter. | `picotool load` |
-| `2E8A:0009` | Our firmware running. COM port + "Reset" interface. | `picotool load -f` reboots it to BOOTSEL first. Not tested yet. |
+| `2E8A:0009` | Our firmware running. COM port + "Reset" interface. | `picotool load -f` reboots it to BOOTSEL first. Worked 2026-11-03. |
 | `2E8A:F00F` | An arduino-pico sketch running | Open its COM port at 1200 baud, close: reboots to BOOTSEL |
 
 Serial monitor:

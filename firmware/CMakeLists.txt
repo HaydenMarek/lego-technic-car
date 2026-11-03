@@ -21,6 +21,9 @@ add_executable(car_firmware
     src/main.c
     src/controller.c
     src/pad_text.c
+    src/drive.c
+    src/motor.c
+    src/servo.c
 )
 
 # btstack_config.h and sdkconfig.h live in src/; Bluepad32 includes them too.
@@ -31,6 +34,8 @@ include_directories(${BTSTACK_ROOT}/src)
 
 target_link_libraries(car_firmware PUBLIC
     pico_stdlib
+    hardware_pwm
+    hardware_watchdog
     pico_cyw43_arch_none
     pico_btstack_classic
     pico_btstack_cyw43

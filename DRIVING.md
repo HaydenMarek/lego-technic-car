@@ -15,6 +15,11 @@ build. Start from them, then retune on the new car.
 7. `LB` + `RB` together: **full power** (100 %). The old build showed a red light.
 8. `B` in full power: back to limited. `B` in limited or unarmed: stop.
 
+**Pico 2 W firmware now:** output is also capped at **50 %**
+(`DRIVE_OUTPUT_CAP` in `firmware/src/drive.h`). So limited and full both
+end at 50 % for now. Raise the cap only after current protection is built.
+Gyro assist and current protection are not built yet.
+
 ## Throttle
 
 - Throttle = right trigger − left trigger, range −100…100.
@@ -57,6 +62,12 @@ build. Start from them, then retune on the new car.
 - No fresh input for **500 ms** → stop and coast.
 - On the Pico, "input" means controller data from Bluepad32.
   Controller disconnect must also stop the car at once.
+- The Pico firmware also **disarms** on failsafe. Re-arm with a new `A` press.
+- The Xbox controller only sends reports when something changes, so
+  "no fresh input" can't mean "no report". On the Pico, the 500 ms is the
+  Bluetooth link supervision timeout: 500 ms without radio packets drops the
+  link, and the disconnect stops the car
+  ([firmware/README.md](firmware/README.md#how-it-runs)).
 - Use unsigned time math (`now - last > timeout`) so `millis()` rollover
   is safe.
 

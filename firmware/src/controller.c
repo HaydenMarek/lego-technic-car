@@ -8,7 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <btstack_event.h>
 #include <btstack_run_loop.h>
+#include <gap.h>
+#include <hci.h>
 #include <pico/cyw43_arch.h>
 #include <pico/time.h>
 #include <uni.h>
@@ -70,12 +73,64 @@ static void on_status_tick(btstack_timer_source_t *ts) {
     tick++;
     if (!controller_connected()) {
         set_led((tick / 2) % 2); // blink, 0.5 s on / 0.5 s off: scanning
-        if (log_enabled && tick % WAITING_MSG_TICKS == 0) {
+        if (tick % WAITING_MSG_TICKS == 0) {
             printf("waiting for controller (hold its pair button)...\n");
         }
     }
     btstack_run_loop_set_timer(ts, TICK_MS);
     btstack_run_loop_add_timer(ts);
+}
+
+// Short link supervision timeout = fast disconnect = fast failsafe.
+// Must run before the first connection attempt.
+static void limit_link_timeout(void) {
+    uint16_t le_timeout = CONTROLLER_LINK_TIMEOUT_MS / 10; // BLE unit: 10 ms
+
+    // Our timeout for new BLE connections. Other values are BTstack defaults:
+    // scan 60/30 ms, interval 10..30 ms, latency 4, CE length 0.
+    gap_set_connection_parameters(0x0060, 0x0030, 0x0008, 0x0018, 4, le_timeout, 0, 0);
+
+    // Reject a controller's request for a longer timeout later.
+    // BTstack default allows up to 32 s.
+    le_connection_parameter_range_t range;
+    gap_get_connection_parameter_range(&range);
+    range.le_supervision_timeout_max = le_timeout;
+    gap_set_connection_parameter_range(&range);
+
+    // Classic Bluetooth controllers (unit 0.625 ms; default 20 s).
+    gap_set_link_supervision_timeout(CONTROLLER_LINK_TIMEOUT_MS * 8 / 5);
+}
+
+static void print_link(const char *what, uint16_t interval, uint16_t latency, uint16_t timeout) {
+    uint32_t interval_x100 = interval * 125u; // unit 1.25 ms
+    uint32_t timeout_ms = timeout * 10u;      // unit 10 ms
+    printf("BLE link %s: interval %lu.%02lu ms, latency %u, timeout %lu ms%s\n", what,
+           (unsigned long)(interval_x100 / 100), (unsigned long)(interval_x100 % 100), latency,
+           (unsigned long)timeout_ms,
+           timeout_ms > CONTROLLER_LINK_TIMEOUT_MS ? "  WARNING: longer than failsafe" : "");
+}
+
+// Logs the real BLE link parameters, so the failsafe timeout can be checked.
+static void on_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
+    ARG_UNUSED(channel);
+    ARG_UNUSED(size);
+    if (packet_type != HCI_EVENT_PACKET) {
+        return;
+    }
+    uint8_t type = hci_event_packet_get_type(packet);
+    if (type == HCI_EVENT_META_GAP &&
+        hci_event_gap_meta_get_subevent_code(packet) == GAP_SUBEVENT_LE_CONNECTION_COMPLETE &&
+        gap_subevent_le_connection_complete_get_status(packet) == 0) {
+        print_link("connected", gap_subevent_le_connection_complete_get_conn_interval(packet),
+                   gap_subevent_le_connection_complete_get_conn_latency(packet),
+                   gap_subevent_le_connection_complete_get_supervision_timeout(packet));
+    } else if (type == HCI_EVENT_LE_META &&
+               hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE &&
+               hci_subevent_le_connection_update_complete_get_status(packet) == 0) {
+        print_link("updated", hci_subevent_le_connection_update_complete_get_conn_interval(packet),
+                   hci_subevent_le_connection_update_complete_get_conn_latency(packet),
+                   hci_subevent_le_connection_update_complete_get_supervision_timeout(packet));
+    }
 }
 
 // Bluepad32 gamepad -> our plain pad_state_t.
@@ -134,6 +189,11 @@ static void platform_init(int argc, const char **argv) {
 
 static void platform_on_init_complete(void) {
     printf("controller: Bluetooth ready, scanning for controllers\n");
+
+    static btstack_packet_callback_registration_t hci_callback;
+    hci_callback.callback = on_hci_event;
+    hci_add_event_handler(&hci_callback);
+    limit_link_timeout();
 
     // Keep stored pairing keys: a paired controller reconnects without pairing mode.
     uni_bt_list_keys_unsafe();
