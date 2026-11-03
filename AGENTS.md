@@ -28,6 +28,29 @@ Rules for AI agents in this repo. `CLAUDE.md` just points here.
   firmware builds, Pico replied, seen on the car. Never call a build or a log
   "seen on the car".
 
+## Flashing the Pico 2 W
+
+Ask first (see above). Then:
+
+| Step | Command |
+| --- | --- |
+| Board ID (FQBN) | `rp2040:rp2040:rpipico2w` (arduino-pico core) |
+| Build | `arduino-cli compile --fqbn rp2040:rp2040:rpipico2w --output-dir <sketch>/build <sketch>` |
+| Find picotool | `find ~/AppData/Local/Arduino15/packages/rp2040/tools/pqt-picotool -name picotool.exe` |
+| Check board | `picotool info` |
+| Flash | `picotool load -v -x <sketch>/build/<name>.ino.uf2` |
+
+- `-v` checks the flash after writing. `-x` starts the program.
+- Board in BOOTSEL mode: USB ID `2E8A:000F`, no COM port, and often
+  no drive letter on Windows. Use picotool, not a UF2 copy.
+- `arduino-cli upload` without `-p` fails here ("no upload port provided").
+- Program running: USB ID `2E8A:F00F` with a COM port. Then
+  `arduino-cli upload -p COMx --fqbn rp2040:rp2040:rpipico2w <sketch>`
+  should work, with no button press. Not tested yet.
+- Onboard LED is on the CYW43 Wi-Fi chip, not GPIO25. Use `LED_BUILTIN`.
+- A good flash is only "Pico replied". The LED or motors doing the right
+  thing is "seen on the car", and only the owner can confirm that.
+
 ## Finishing work
 
 - Update the docs in the same change as the code.

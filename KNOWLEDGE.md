@@ -90,6 +90,7 @@ Measured during wheelspin, with the limits we used (peak + 10 %):
 
 - Python 3.13, PlatformIO Core 6.2, arduino-cli 1.5.1
   (`C:\Program Files\Arduino CLI`).
-- arduino-cli has the AVR and ESP32 cores. The Pico core
-  ([arduino-pico](https://github.com/earlephilhower/arduino-pico)) is not
-  installed yet.
+- arduino-cli has the AVR, ESP32 and Pico cores
+  ([arduino-pico](https://github.com/earlephilhower/arduino-pico) 6.3.2,
+  `rp2040:rp2040`). Pico 2 W FQBN: `rp2040:rp2040:rpipico2w`.
+- How to flash the Pico: see [AGENTS.md](AGENTS.md#flashing-the-pico-2-w).
