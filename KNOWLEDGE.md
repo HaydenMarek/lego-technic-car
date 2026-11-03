@@ -24,8 +24,8 @@ git checkout main                 # come back
 |---|---|---|
 | `RPWM` | PWM, one direction | |
 | `LPWM` | PWM, other direction | |
-| `R_EN`, `L_EN` | Enable both halves | Add 10 kΩ pull-downs to GND, so the bridge is off while the controller boots. |
-| `R_IS`, `L_IS` | Current sense | Analog. Add 300 Ω to GND on each (see below). |
+| `R_EN`, `L_EN` | Enable both halves | Add pull-downs to GND, so the bridge is off while the controller boots. Old build: 10 kΩ. Pico build: both joined, one 4.7 kΩ (RP2350 erratum E9, see [WIRING.md](WIRING.md)). |
+| `R_IS`, `L_IS` | Current sense | Analog. Old build: 300 Ω to GND on each. Pico build: both joined, **one** 300 Ω (see below). |
 | `VCC` | Logic supply | Never connect battery voltage here. |
 | `GND` | Common ground | |
 | `B+`, `B-` | Battery | `B+` through the main switch. |
@@ -46,6 +46,9 @@ Measured during wheelspin, with the limits we used (peak + 10 %):
 | `R_IS` | 0.24 V | 0.27 V | ~333 counts |
 
 - Forward drive showed mostly on `L_IS`, reverse on `R_IS`.
+- Pico build joins both IS pins on one ADC pin with one 300 Ω (≈ 283 Ω
+  total, about the same scale). Use the `L_IS` limit for forward and the
+  `R_IS` limit for reverse.
 - Measure again on the new build before trusting these numbers.
 
 ## Power
@@ -71,14 +74,16 @@ Measured during wheelspin, with the limits we used (peak + 10 %):
 - Not built yet: battery voltage monitoring, low-voltage cutoff,
   temperature sensing.
 
-## What changes on the Pico 2 W (not yet checked)
+## What changes on the Pico 2 W (planned, not yet checked)
+
+The plan for each row is in [WIRING.md](WIRING.md).
 
 | Topic | Old build | Pico 2 W: check this |
 |---|---|---|
-| Logic level | 5 V | Pico outputs 3.3 V. The IBT-2 board buffers inputs with a 74HC chip powered from `VCC`. At `VCC` = 5 V, 3.3 V is a borderline "high". Try `VCC` = 3.3 V, or test it. |
-| ADC | 10-bit, 5 V | 12-bit, 3.3 V max. Only GP26, GP27, GP28 are free ADC pins. Keep the 300 Ω on IS so it stays under 3.3 V. Measure first. |
+| Logic level | 5 V | Pico outputs 3.3 V. The IBT-2 board buffers inputs with a 74HC chip powered from `VCC`. At `VCC` = 5 V, 3.3 V is a borderline "high". Plan: `VCC` = 3.3 V from Pico `3V3(OUT)`. Measure to confirm. |
+| ADC | 10-bit, 5 V | 12-bit, 3.3 V max. Only GP26, GP27, GP28 are free ADC pins. Plan: join both IS pins on GP26, one 300 Ω, plus 1 kΩ series + 100 nF at the ADC pin. Measure first. |
 | Power in | 5 V pin | Feed 5 V into `VSYS`. Use a Schottky diode if USB may be plugged in at the same time (see Pico datasheet). |
-| Servo | (LEGO motor steered) | Servo current spikes can brown out the 5 V rail. Same capacitor fix as above may be needed. |
+| Servo | (LEGO motor steered) | Geekservo 360°, 3.3–6 V, ~0.5 A stall. Power it from the 5 V buck, not Pico 3V3. Current spikes can brown out the 5 V rail, so add 470 µF at the servo. |
 
 ## Useful links
 

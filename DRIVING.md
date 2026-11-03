@@ -62,7 +62,10 @@ build. Start from them, then retune on the new car.
 
 ## Current protection
 
-Check `L_IS` and `R_IS` every 5 ms while the motor runs.
+Check the current sense pin every 5 ms while the motor runs.
+On the Pico build `R_IS` and `L_IS` are joined on one ADC pin
+([WIRING.md](WIRING.md)). Pick the limit by the commanded direction:
+the forward limit when driving forward, the reverse limit when reversing.
 Limits are in [KNOWLEDGE.md](KNOWLEDGE.md#current-sense-r_is-l_is).
 
 | Event | Action |
