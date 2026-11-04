@@ -1,13 +1,14 @@
-# raspberry-lego-technic
+# RC Drifting with LEGO® Technic Powered By Raspberry Pi 
 
-A LEGO Technic RC car controlled by a Raspberry Pi Pico 2 W.
+I had problem with official LEGO® Technic Powered Up Hub because it don't support high current output to drivetrain motors. Usually they have built-in current protection or other type of limit. So this open-source project covers how to create your own controller for LEGO® Technic RC Car, it can be usefull for those who want to create such controller from scratch, with components they can buy online. During my progress I will update this repository with guidance, schematics and parts list.
 
-## How it works
+## Ultimate Goal
 
 - An Xbox Elite Series 2 controller connects to the Pico 2 W over Bluetooth ([Bluepad32](https://github.com/ricardoquesada/bluepad32)).
-- A servo steers.
+- A Geek servo steers.
 - Buggy motors (unofficial) drive the car through a BTS7960 H-bridge.
-- An MPU6500 gyro helps steering during drifts.
+- Current protection, its level configurable by firmware.
+- An MPU6500 gyro support drifting.
 
 ![Block diagram: MPU6500 gyro feeds the Pico 2 W, which drives the steering servo and, through the BTS7960 H-bridge, the buggy motors](assets/top-level-graph.png)
 
@@ -15,12 +16,12 @@ A LEGO Technic RC car controlled by a Raspberry Pi Pico 2 W.
 
 | Part | Job | Have it? |
 |------|-----|----------|
-| [Raspberry Pi Pico 2 W](https://www.raspberrypi.com/products/raspberry-pi-pico-2/) (or Pico 2 WH, headers soldered) | Main controller | No (~7–8 €) |
+| [Raspberry Pi Pico 2 W](https://www.raspberrypi.com/products/raspberry-pi-pico-2/) (or Pico 2 WH, headers soldered) | Main controller | Yes |
 | Xbox Elite Series 2 | Remote control | Yes |
 | [Geekservo 360° servo](https://shop.pimoroni.com/en-eu/products/geekservo-building-bricks-360-degree-servo?variant=40401223778387) | Steering | Yes |
 | [BTS7960 H-bridge](https://techfun.sk/produkt/vykonny-motor-driver-43a-h-bridge-bts7960/) | Drives the motors | Yes |
-| Buggy motors | Drive | TBD |
-| [MPU6500 6DOF](https://techfun.sk/produkt/akcelerometer-gyroskop-mpu6500-6dof/) | Gyro for drift steering assist | No (2.70 €, buy 2) |
+| Buggy motors | Drive | Yes |
+| [MPU6500 6DOF](https://techfun.sk/produkt/akcelerometer-gyroskop-mpu6500-6dof/) | Gyro for drift steering assist | Yes |
 
 ## Docs
 
