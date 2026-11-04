@@ -89,6 +89,9 @@ too long. Do not drive then.
 
 ## First bench test (wheels off the ground, owner at S2)
 
+Phase 1 (no servo, [WIRING.md](../WIRING.md#phase-1-drive-only-now)):
+skip step 1, but still flash with S2 off.
+
 1. S2 (motor power) off. Flash. Check the servo centers and the stick steers
    the right way. Tune `SERVO_*`.
 2. S2 on. Arm with `A`. Light right trigger: wheels should turn forward.

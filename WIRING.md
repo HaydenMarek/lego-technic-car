@@ -6,6 +6,31 @@ How the Pico 2 W build is wired. Based on
 **Status: plan only.** Nothing here is measured or seen on the car yet.
 Lessons behind these choices are in [KNOWLEDGE.md](KNOWLEDGE.md).
 
+## Phase 1: drive only (now)
+
+Servo not here yet. Current sense comes in the next phase.
+The firmware needs no change for this phase.
+
+| Wire it | Leave it out |
+|---|---|
+| Battery, S1, buck, S2, `B+`/`B−`, motors | Servo (GP15 sends pulses to nothing; harmless) |
+| 5 V buck → Schottky → `VSYS`, + 470–1000 µF and 100 nF | `R_IS`, `L_IS`: **unconnected** |
+| GP2 → `RPWM`, GP3 → `LPWM` | 300 Ω, 1 kΩ, 100 nF of `IS` |
+| GP6 → `R_EN` + `L_EN`, **4.7 kΩ to GND** | MPU6500 |
+| 3V3(OUT) → BTS7960 `VCC`, GND (pin 3) → BTS7960 `GND` | Battery divider |
+
+Watch out:
+
+- **Set the buck to 5.0 V before** connecting the Pico. Many come set
+  higher. `VSYS` max is 5.5 V.
+- Do **not** wire `IS` to GP26 without its 300 Ω and 1 kΩ. The board has
+  only 10 kΩ to GND, so `IS` can go far above 3.3 V and damage the pin.
+- No Schottky yet? Then do not plug in USB while the buck feeds `VSYS`.
+- Still no fuse (issue #11). Short runs, wheels off the ground, hand on S2.
+
+Then run "Check before first power" (end of this file) and the
+[bench test](firmware/README.md#first-bench-test-wheels-off-the-ground-owner-at-s2).
+
 ## Fewest wires: carrier board
 
 Put everything small on one perfboard: Pico, MPU6500, 5 V buck, servo
