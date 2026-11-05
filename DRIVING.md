@@ -18,6 +18,7 @@ build. Start from them, then retune on the new car.
 **Pico 2 W firmware now:** output is also capped at **50 %**
 (`DRIVE_OUTPUT_CAP` in `firmware/src/drive.h`). So limited and full both
 end at 50 % for now. Raise the cap only after current protection is built.
+Currents measured at 50 %: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md#results).
 Gyro assist and current protection are not built yet.
 
 ## Throttle

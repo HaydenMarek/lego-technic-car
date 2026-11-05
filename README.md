@@ -28,6 +28,7 @@ I had problem with official LEGO® Technic Powered Up Hub because it don't suppo
 - [WIRING.md](WIRING.md): how the Pico 2 W build is wired (pins, power, parts).
 - [KNOWLEDGE.md](KNOWLEDGE.md): wiring, power and safety lessons from the first build.
 - [DRIVING.md](DRIVING.md): arming, throttle, ramps, failsafe and drift assist.
+- [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md): phase 1 status and motor current measurements.
 - [firmware/README.md](firmware/README.md): the Pico firmware (controller pairing so far).
 
 Toolchain: C with the [Pico SDK](https://github.com/raspberrypi/pico-sdk) 2.1.1 and [Bluepad32](https://github.com/ricardoquesada/bluepad32) 4.2.0, built with CMake. See [AGENTS.md](AGENTS.md#building-and-flashing-the-pico-2-w).

@@ -13,6 +13,7 @@ Rules for AI agents in this repo. `CLAUDE.md` just points here.
 ## Before you start
 
 - Read [KNOWLEDGE.md](KNOWLEDGE.md) and [DRIVING.md](DRIVING.md).
+- Current build state and measurements: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md).
 - Old Arduino/Hub code is in git tag `legacy-arduino-hub`. Use it for
   reference only.
 

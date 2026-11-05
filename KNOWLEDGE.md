@@ -50,6 +50,8 @@ Measured during wheelspin, with the limits we used (peak + 10 %):
   total, about the same scale). Use the `L_IS` limit for forward and the
   `R_IS` limit for reverse.
 - Measure again on the new build before trusting these numbers.
+  Multimeter motor currents for the new build:
+  [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md#results).
 
 ## Power
 
@@ -70,6 +72,7 @@ Measured during wheelspin, with the limits we used (peak + 10 %):
 - If a motor or wire gets hot, cut power.
 - There is **no fuse** and no independent current protection yet
   ([issue #11](https://github.com/HaydenMarek/lego-technic-car/issues/11)).
+  Currents to size it: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md#results).
   The BTS7960's built-in protection is not enough on its own.
 - Not built yet: battery voltage monitoring, low-voltage cutoff,
   temperature sensing.

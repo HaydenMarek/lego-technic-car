@@ -3,7 +3,9 @@
 How the Pico 2 W build is wired. Based on
 [the block diagram](assets/top-level-graph.png).
 
-**Status: plan only.** Nothing here is measured or seen on the car yet.
+**Status:** phase 1 is built and drives at 50 % (seen on the car, owner,
+2026-11-04). Results and measurements: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md).
+Everything after phase 1 is still plan only.
 Lessons behind these choices are in [KNOWLEDGE.md](KNOWLEDGE.md).
 
 ## Phase 1: drive only (now)
@@ -30,6 +32,7 @@ Watch out:
 
 Then run "Check before first power" (end of this file) and the
 [bench test](firmware/README.md#first-bench-test-wheels-off-the-ground-owner-at-s2).
+Write results in [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md).
 
 ## Fewest wires: carrier board
 
@@ -85,6 +88,7 @@ Battery − ─ common ground point ─ BTS7960 B−, buck GND, Pico GND, servo 
   Pico-to-BTS7960 GND wire is the signal reference only. Still connect it.
 - Fuse rating: not chosen yet. Needs measurements and owner approval
   ([issue #11](https://github.com/HaydenMarek/lego-technic-car/issues/11)).
+  Motor currents go in [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md#results).
 
 ## Pico 2 W pins
 

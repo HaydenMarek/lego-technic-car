@@ -111,6 +111,8 @@ skip step 1, but still flash with S2 off.
 3. Hold the right trigger still for 5 s: no `FAILSAFE`, motor keeps running.
 4. Turn the controller off: the motors must stop within about 500 ms.
 
+Write results in [PHASE1-PROGRESS.md](../PHASE1-PROGRESS.md).
+
 ## Over-the-air update (Wi-Fi)
 
 Status (2026-11-05): works. Three Wi-Fi updates, ~17 s each for 659 KB.
