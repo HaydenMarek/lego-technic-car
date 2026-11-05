@@ -28,9 +28,16 @@ First clone: `git submodule update --init` (Bluepad32).
 | `src/servo.c/.h` | Servo: 50 Hz on GP15 |
 | `src/controller.c/.h` | Bluetooth: scan, auto-pair, reconnect, keep the latest state |
 | `src/pad_text.c/.h` | `pad_state_t` (plain controller data) and text formatting |
-| `src/sdkconfig.h`, `src/btstack_config.h` | Bluepad32 / BTstack settings |
-| `tests/` | PC tests (host gcc) for `drive.c` and `pad_text.c` |
+| `src/ota.c/.h` | Wi-Fi, mDNS, OTA upload server, flash writes, reboot, TBYB buy |
+| `src/ota_logic.c/.h` | OTA protocol, UF2 checks, buy decision. No Pico SDK, tested on PC. |
+| `src/flash_bank_fix.c` | Pairing keys readable when running from partition B |
+| `src/sdkconfig.h`, `src/btstack_config.h`, `src/lwipopts.h` | Bluepad32 / BTstack / lwIP settings |
+| `partition_table.json` | A/B slots for OTA. Built into `build/pico2w/partition_table.uf2`. |
+| `.env.example` | Copy to `.env` (git-ignored): Wi-Fi name, password, OTA token |
+| `tools/ota.mjs` | PC upload tool (Node 22, no packages) |
+| `tests/` | PC tests (host gcc) for `drive.c`, `pad_text.c`, `ota_logic.c` |
 | `cmake/pico_host_tools.cmake` | Downloads prebuilt picotool 2.1.1 (Windows) |
+| `cmake/ota_secrets.cmake` | Reads `.env`, writes `build/.../generated/ota_secrets.h` |
 | `external/bluepad32` | Git submodule, tag `4.2.0` |
 
 ## Settings to tune on the car
@@ -57,8 +64,10 @@ First clone: `git submodule update --init` (Bluepad32).
      drops → disconnect. Longer timeouts asked by the controller are rejected.
    - The real values print as `BLE link connected/updated: ...`.
 4. Watchdog: if the loop stops for 1 s, the Pico resets (motors coast).
+5. Wi-Fi joins in the background. Driving does not wait for it. See
+   [Over-the-air update](#over-the-air-update-wi-fi).
 
-Threading: everything runs on the BTstack run loop. Call `controller_latest()`
+Threading: everything (Bluetooth, lwIP, OTA) runs on the BTstack run loop. Call `controller_latest()`
 from there, not from an IRQ or core 1.
 
 ## Values
@@ -73,7 +82,10 @@ from there, not from an IRQ or core 1.
 ## Serial output
 
 ```text
+boot: partition 0                                     -1 = no partition table (OTA off)
+wifi: joining "MyHomeWifi"
 car firmware: output cap 50 %, no gyro
+wifi: connected, 192.168.1.50 (lego-car.local), OTA port 4242
 waiting for controller (hold its pair button)...     every 5 s, LED blinks
 BLE link connected: interval 15.00 ms, latency 4, timeout 500 ms
 BLE link updated: ...                                 if the controller asks for new values
@@ -98,3 +110,95 @@ skip step 1, but still flash with S2 off.
    If not, flip `MOTOR_DIRECTION`.
 3. Hold the right trigger still for 5 s: no `FAILSAFE`, motor keeps running.
 4. Turn the controller off: the motors must stop within about 500 ms.
+
+## Over-the-air update (Wi-Fi)
+
+Status (2026-11-05): works. Three Wi-Fi updates, ~17 s each for 659 KB.
+New slot boots, joins Wi-Fi, buys itself, watchdog on (Pico replied).
+Controller stays on and reconnects by itself after the update (seen on the car).
+
+- The IP can change (DHCP). Use `lego-car.local`; the tool retries the
+  lookup 5 times because mDNS answers sometimes get lost (Wi-Fi power save).
+
+### How it works
+
+1. Flash has two slots, A and B (`partition_table.json`, 2000 KB each). The
+   car runs from one; the upload goes into the other.
+2. `tools/ota.mjs` connects to `lego-car.local:4242` and sends a header with
+   the token from `.env`.
+3. The car stops (same as failsafe: disarm, coast, center). The controller
+   stays connected, but its input is ignored. No new connections. LED blinks fast.
+   - Why not disconnect: an Xbox controller that the host disconnects turns
+     itself off (seen 2026-11-05). When the link just drops at the reboot, it
+     reconnects by itself.
+4. The PC sends the UF2 in 2 KB chunks. The Pico checks each block, writes it
+   with interrupts off and reads it back.
+5. Pico reboots into the new slot ("flash update" boot).
+6. New image buys itself once Bluetooth **and** Wi-Fi work. Not in 15 s →
+   reboot → the boot ROM starts the old slot again.
+7. The controller reconnects by itself (pairing keys are outside the slots).
+   If it went to sleep, press the Xbox button.
+
+Safety nets:
+
+- Corrupt or half-written slot: the image hash fails, the boot ROM keeps the old one.
+- Upload stops halfway (PC gone, 10 s no data): the car resumes, the controller may reconnect.
+- Wrong token, other chip, too big: refused before anything is written.
+
+### First-time setup (USB, once)
+
+Ask the owner first ([AGENTS.md](../AGENTS.md#real-hardware)). Motor power (S2) off.
+
+1. `cp firmware/.env.example firmware/.env` and fill in. Wi-Fi must be **2.4 GHz**.
+2. Build (see [AGENTS.md](../AGENTS.md#building-and-flashing-the-pico-2-w)).
+3. Flash the partition table, then the firmware (done 2026-11-04):
+
+   ```bash
+   picotool load -f firmware/build/pico2w/partition_table.uf2
+   picotool partition info        # lists "Car A" and "Car B"
+   picotool load -v -x firmware/build/pico2w/car_firmware.uf2
+   ```
+
+   `-f` reboots running firmware into BOOTSEL. After the table is written
+   there is no valid firmware, so the Pico stays in BOOTSEL and has already
+   read the new table. No `picotool reboot -u` needed.
+4. Serial should show `boot: partition 0, not bought yet`, `ota: new image
+   bought, watchdog on` and `wifi: connected, <IP>`.
+5. Later USB flashes: `picotool load -f -v -x ...` writes into the free slot
+   (A or B). The pairing keys stay.
+
+### Update
+
+```bash
+cd firmware && cmake --build --preset pico2w && cd ..
+node firmware/tools/ota.mjs                     # or: --host <IP from serial>
+```
+
+Upload takes some seconds. `lego-car.local` needs mDNS (Windows 10/11 have it).
+If it is not found, use the IP from the serial log or set `OTA_HOST` in `.env`.
+
+Expected serial on the car:
+
+```text
+ota: PC connected
+ota: writing partition 1 at 0x1f6000, 2000 KB
+ota: update 659 KB: stopping car
+OTA: update started, coasting
+ota: car stopped, receiving
+ota: all 2632 blocks written, rebooting into the new image
+...
+boot: partition 1, after OTA update, not bought yet
+wifi: connected, ...
+ota: buying...
+ota: new image bought, watchdog on
+```
+
+`watchdog OFF` there is a bug: the 1 s failsafe is gone. Do not drive.
+
+### Limits
+
+- One Wi-Fi network for now. A phone hotspot works if it is 2.4 GHz and the
+  PC joins the same hotspot. Then put its name/password in `.env` and rebuild.
+- Wi-Fi password and token are stored in plain text in the Pico flash.
+- Anyone with the token on the same network can flash the car. No signing
+  (secure boot is one-way OTP; not used).

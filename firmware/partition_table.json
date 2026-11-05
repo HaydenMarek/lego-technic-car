@@ -1,0 +1,37 @@
+{
+  "version": [1, 0],
+  "unpartitioned": {
+    "families": ["absolute"],
+    "permissions": {
+      "secure": "rw",
+      "nonsecure": "rw",
+      "bootloader": "rw"
+    }
+  },
+  "partitions": [
+    {
+      "name": "Car A",
+      "id": 0,
+      "start": "8K",
+      "size": "2000K",
+      "families": ["rp2350-arm-s"],
+      "permissions": {
+        "secure": "rw",
+        "nonsecure": "rw",
+        "bootloader": "rw"
+      }
+    },
+    {
+      "name": "Car B",
+      "id": 1,
+      "size": "2000K",
+      "families": ["rp2350-arm-s"],
+      "permissions": {
+        "secure": "rw",
+        "nonsecure": "rw",
+        "bootloader": "rw"
+      },
+      "link": ["a", 0]
+    }
+  ]
+}

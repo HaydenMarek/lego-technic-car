@@ -14,3 +14,8 @@ add_executable(test_drive test_drive.c ../src/drive.c)
 target_include_directories(test_drive PRIVATE ../src)
 target_compile_options(test_drive PRIVATE -Wall -Wextra -Werror)
 add_test(NAME drive COMMAND test_drive)
+
+add_executable(test_ota_logic test_ota_logic.c ../src/ota_logic.c)
+target_include_directories(test_ota_logic PRIVATE ../src)
+target_compile_options(test_ota_logic PRIVATE -Wall -Wextra -Werror)
+add_test(NAME ota_logic COMMAND test_ota_logic)

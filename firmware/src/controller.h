@@ -31,3 +31,11 @@ bool controller_latest(pad_state_t *out, uint32_t *updated_ms);
 
 // Print state changes on USB serial (on by default, for testing).
 void controller_set_log(bool on);
+
+// True once Bluetooth is up and scanning (used as a health check for OTA).
+bool controller_bt_ready(void);
+
+// OTA update: stop scanning, refuse new connections. Keeps the link.
+void controller_pause(void);
+// Undo controller_pause(): a paired controller reconnects by itself.
+void controller_resume(void);

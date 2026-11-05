@@ -30,6 +30,8 @@
 
 static int connected_count;
 static bool log_enabled = true;
+static bool bt_ready;
+static bool paused; // OTA update running
 
 static pad_state_t latest;
 static uint32_t latest_ms;
@@ -68,10 +70,32 @@ void controller_set_log(bool on) {
     log_enabled = on;
 }
 
+bool controller_bt_ready(void) {
+    return bt_ready;
+}
+
+// Keeps a connected controller connected on purpose: an Xbox controller
+// that the host disconnects turns itself off (seen 2026-11-05). When the link
+// just drops (the reboot at the end of the update), it reconnects by itself.
+// Driving is blocked by main.c (ota_active()), not here.
+void controller_pause(void) {
+    paused = true;
+    uni_bt_stop_scanning_unsafe();
+    uni_bt_allow_incoming_connections(false);
+}
+
+void controller_resume(void) {
+    paused = false;
+    uni_bt_allow_incoming_connections(true);
+    uni_bt_start_scanning_and_autoconnect_unsafe();
+}
+
 // Runs every TICK_MS on the Bluetooth thread.
 static void on_status_tick(btstack_timer_source_t *ts) {
     tick++;
-    if (!controller_connected()) {
+    if (paused) {
+        set_led(tick % 2); // fast blink: OTA update running
+    } else if (!controller_connected()) {
         set_led((tick / 2) % 2); // blink, 0.5 s on / 0.5 s off: scanning
         if (tick % WAITING_MSG_TICKS == 0) {
             printf("waiting for controller (hold its pair button)...\n");
@@ -198,6 +222,7 @@ static void platform_on_init_complete(void) {
     // Keep stored pairing keys: a paired controller reconnects without pairing mode.
     uni_bt_list_keys_unsafe();
     uni_bt_start_scanning_and_autoconnect_unsafe();
+    bt_ready = true;
 
     btstack_run_loop_set_timer_handler(&status_timer, on_status_tick);
     btstack_run_loop_set_timer(&status_timer, TICK_MS);
@@ -229,6 +254,9 @@ static void platform_on_device_disconnected(uni_hid_device_t *d) {
 }
 
 static uni_error_t platform_on_device_ready(uni_hid_device_t *d) {
+    if (paused) {
+        return UNI_ERROR_IGNORE_DEVICE; // OTA running: Bluepad32 drops it
+    }
     connected_count++;
     set_led(true);
     memset(&latest, 0, sizeof latest);

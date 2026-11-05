@@ -13,6 +13,7 @@
 #include "controller.h"
 #include "drive.h"
 #include "motor.h"
+#include "ota.h"
 #include "servo.h"
 
 // Firmware stuck this long: the Pico resets, EN pull-down coasts the motors.
@@ -37,7 +38,8 @@ static void on_drive_tick(btstack_timer_source_t *ts) {
     // Report age is no use: the controller only reports changes.
     pad_state_t pad;
     uint32_t at_ms;
-    const pad_state_t *input = controller_latest(&pad, &at_ms) ? &pad : NULL;
+    // OTA update running: same as "no controller" (disarm, coast, center).
+    const pad_state_t *input = !ota_active() && controller_latest(&pad, &at_ms) ? &pad : NULL;
 
     drive_mode_t before = drive.mode;
     drive_out_t out = drive_step(&drive, input);
@@ -45,7 +47,8 @@ static void on_drive_tick(btstack_timer_source_t *ts) {
     servo_set(out.steer);
 
     if (had_input && input == NULL) {
-        printf("FAILSAFE: controller lost, coasting\n");
+        printf(ota_active() ? "OTA: update started, coasting\n"
+                            : "FAILSAFE: controller lost, coasting\n");
     } else if (!had_input && input != NULL) {
         printf("input OK. Press A (triggers released) to arm.\n");
     }
@@ -83,6 +86,7 @@ int main(void) {
     controller_set_log(false); // no raw pad lines; we print drive status instead
     uni_platform_set_custom(controller_platform()); // must be before uni_init()
     uni_init(0, NULL);
+    ota_init(); // Wi-Fi joins in the background; driving does not wait
 
     btstack_run_loop_set_timer_handler(&drive_timer, on_drive_tick);
     btstack_run_loop_set_timer(&drive_timer, DRIVE_FRAME_MS);

@@ -118,6 +118,37 @@ Each one cost a failed build. The fix is already in `firmware/`.
 | `pioasm.exe` vanishes, "cannot execute" | Windows Defender quarantined the prebuilt pioasm (likely false positive) | Let the SDK build pioasm |
 | `undefined reference to __retarget_lock_*` | Arduino's `pqt-gcc` newlib expects the Arduino core to supply locks | Use the Arm GNU Toolchain, not `pqt-gcc` |
 
+## OTA update on the RP2350
+
+How the A/B boot works. Proof: read the code (boot ROM source
+`raspberrypi/pico-bootrom-rp2350`, `varm_flash_boot.c`, `varm_launch_image.c`).
+Works on the Pico 2 W since 2026-11-05: A and B both booted, OTA buy and
+revert-free updates (Pico replied).
+
+- Two partitions A and B. After an OTA, a "flash update" reboot tries the new one.
+- New images are "try before you buy" (TBYB). The firmware must call
+  `rom_explicit_buy()`. Any reboot before that: the boot ROM uses the old one.
+- No version numbers needed. Same version: after buying B, the boot ROM erases
+  A's first sector. A normal boot prefers A when both are valid.
+- A TBYB image started by a normal boot (e.g. after USB flash) is also "buy
+  pending", with a 16.7 s boot ROM watchdog. Our firmware buys it once
+  Bluetooth is up.
+- Running from a partition turns on address translation: `XIP_BASE` = start
+  of *our* partition. Read other flash through
+  `XIP_NOCACHE_NOALLOC_NOTRANSLATE_BASE`. `flash_range_erase/program` use
+  physical offsets.
+
+Pitfalls fixed in `firmware/` (found while building, 2026-11-04):
+
+| Problem | Fix |
+| --- | --- |
+| BTstack reads pairing keys via `XIP_BASE` → wrong place from partition B | `-Wl,--wrap=pico_flash_bank_instance`, `src/flash_bank_fix.c` |
+| Bluepad32 links `pico_cyw43_arch_none` (`CYW43_LWIP=0`), we need lwIP (`=1`). Mixed → different `cyw43_t` layout | `CMakeLists.txt` swaps the library on the `bluepad32` target |
+| SDK example writes flash with interrupts on | `flash_safe_execute()` around our own flash writes |
+| SDK `rom_explicit_buy()` already calls `flash_safe_execute()`. Wrapping it again leaves interrupts **off for good**: one saved IRQ state per core. Symptom: all timers, Bluetooth, USB serial stop after `bought`; LED frozen. | Call `rom_explicit_buy()` directly. Never nest `flash_safe_execute()`. Pico replied 2026-11-05. |
+| `rom_explicit_buy()` switches the watchdog off (it stops the boot ROM's TBYB timer). Our 1 s failsafe was gone. | Turn `WATCHDOG_CTRL_ENABLE` back on after the buy. Pico replied 2026-11-05. |
+| `picotool load -x` reboots with type FLASH_UPDATE too, so a USB flash looked like OTA | OTA writes a marker to watchdog `scratch[0]` before its reboot |
+
 ## Xbox controller (Bluetooth)
 
 Seen with the Pico 2 W controller test app (2026-11-03). Proof: Pico replied
@@ -133,6 +164,9 @@ Seen with the Pico 2 W controller test app (2026-11-03). Proof: Pico replied
 - **Sticks do not rest at 0.** Seen at rest: left (47, 47) and (45, −32),
   right about ±43. That is up to ~9 % of full travel. Steering needs a deadzone.
 - Seen working: A, B, X, Y, LB, RB, d-pad, both triggers, both sticks.
+- **Host disconnects it → it turns off.** Link just drops (Pico reboots) →
+  it reconnects by itself within seconds. So the OTA update keeps the link
+  and only ignores input. Seen on the car 2026-11-05.
 - **Reports only on change.** Hands still = no reports at all (driving
   firmware, 2026-11-03, Pico replied). So a failsafe can't use report age.
   Use the link supervision timeout instead.

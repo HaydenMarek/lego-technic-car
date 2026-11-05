@@ -37,12 +37,18 @@ Building and PC tests need no permission. Flashing and serial: ask first
 | Step | Command (Git Bash) |
 | --- | --- |
 | First clone | `git submodule update --init` |
+| Wi-Fi settings | Copy `firmware/.env.example` to `firmware/.env` (git-ignored), fill in. The build stops without it. |
 | Build | `cd firmware && cmake --preset pico2w && cmake --build --preset pico2w` |
 | PC tests | `cd firmware/tests && cmake --preset host-tests && cmake --build --preset host-tests && ctest --preset host-tests` |
 | picotool | `firmware/.deps/tools-2.1.1/picotool-2.1.1-x64-win/picotool/picotool.exe` |
 | Check board | `picotool info` |
-| Flash | `picotool load -v -x firmware/build/pico2w/car_firmware.uf2` |
+| Flash (USB) | `picotool load -v -x firmware/build/pico2w/car_firmware.uf2` |
+| Partition table (USB, once) | See [firmware/README.md](firmware/README.md#first-time-setup-usb-once) |
+| Flash over Wi-Fi | `node firmware/tools/ota.mjs` (car must be on Wi-Fi) |
 
+- An upload over Wi-Fi is flashing too: **ask first**, same rules as USB.
+  It stops the car (controller input ignored), then the Pico reboots.
+- Never `.env` in git or in logs. It holds the Wi-Fi password and OTA token.
 - First build downloads Pico SDK 2.1.1 and picotool into `firmware/.deps/`
   (git-ignored). Needs Arm GNU Toolchain 14.2.Rel1 ([KNOWLEDGE.md](KNOWLEDGE.md#tools-on-this-laptop)).
 - After changing presets or toolchain: `cmake --preset pico2w --fresh`.
