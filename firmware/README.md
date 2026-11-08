@@ -5,7 +5,8 @@ Pico 2 W firmware. C, Pico SDK 2.1.1, [Bluepad32](https://github.com/ricardoques
 It is the **driving firmware**: Xbox controller over Bluetooth → BTS7960
 motors + steering servo, as in [DRIVING.md](../DRIVING.md).
 
-- Motor output is **capped at 50 %** PWM duty (`DRIVE_OUTPUT_CAP`).
+- Motor output: limited 75 %, full 100 % PWM duty. `DRIVE_OUTPUT_CAP` = 100
+  (no extra cap; was 50 until 2026-11-08).
 - Not built yet: gyro drift assist, current protection.
 - Status: builds, PC tests pass. Serial test passed 2026-11-03 (Pico
   replied, USB only): arming, modes, 50 % cap, steering values, steady
@@ -44,8 +45,8 @@ First clone: `git submodule update --init` (Bluepad32).
 
 | Constant | File | Now | Check |
 | --- | --- | --- | --- |
-| `DRIVE_OUTPUT_CAP` | `drive.h` | 50 | Max PWM duty %. Both modes stop here. |
-| `MOTOR_DIRECTION` | `motor.c` | 1 | Set −1 if the right trigger drives backwards (old build needed −1). |
+| `DRIVE_OUTPUT_CAP` | `drive.h` | 100 | Max PWM duty %, on top of the mode limits. 100 = no extra cap. |
+| `MOTOR_DIRECTION` | `motor.c` | −1 | Flip if the right trigger drives backwards. Set to −1 on 2026-11-08 (+1 drove backwards). |
 | `SERVO_CENTER_US` | `servo.c` | 1500 | Wheels straight. Not measured. |
 | `SERVO_RANGE_US` | `servo.c` | 150 | Full stick = center ± this (~27° on a 360° servo). Not measured. |
 | `SERVO_DIRECTION` | `servo.c` | 1 | Set −1 if the stick steers the wrong way. |
@@ -84,7 +85,7 @@ from there, not from an IRQ or core 1.
 ```text
 boot: partition 0                                     -1 = no partition table (OTA off)
 wifi: joining "MyHomeWifi"
-car firmware: output cap 50 %, no gyro
+car firmware: output cap 100 %, no gyro
 wifi: connected, 192.168.1.50 (lego-car.local), OTA port 4242
 waiting for controller (hold its pair button)...     every 5 s, LED blinks
 BLE link connected: interval 15.00 ms, latency 4, timeout 500 ms

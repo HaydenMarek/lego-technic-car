@@ -128,18 +128,18 @@ static void test_arm_needs_new_press_and_released_triggers(void) {
     CHECK_EQ(d.mode, DRIVE_LIMITED);
 }
 
-static void test_output_capped_at_50(void) {
+static void test_mode_limits(void) {
     drive_t d = armed();
     pad_state_t full = {.rt = 1023};
-    CHECK_EQ(run(&d, &full, 10).motor, DRIVE_OUTPUT_CAP);
+    CHECK_EQ(run(&d, &full, 10).motor, DRIVE_LIMITED_MAX); // 75
 
     pad_state_t combo = {.buttons = PAD_LB | PAD_RB, .rt = 1023};
     drive_step(&d, &combo);
     CHECK_EQ(d.mode, DRIVE_FULL);
-    CHECK_EQ(run(&d, &combo, 10).motor, DRIVE_OUTPUT_CAP); // full power still capped
+    CHECK_EQ(run(&d, &combo, 10).motor, DRIVE_FULL_MAX); // 100, no extra cap
 
     pad_state_t back = {.lt = 1023};
-    CHECK_EQ(run(&d, &back, 30).motor, -DRIVE_OUTPUT_CAP);
+    CHECK_EQ(run(&d, &back, 30).motor, -DRIVE_FULL_MAX);
 }
 
 static void test_b_steps_down(void) {
@@ -189,7 +189,7 @@ int main(void) {
     test_ramp_reverse();
     test_boot_unarmed();
     test_arm_needs_new_press_and_released_triggers();
-    test_output_capped_at_50();
+    test_mode_limits();
     test_b_steps_down();
     test_b_stops_at_once();
     test_failsafe();

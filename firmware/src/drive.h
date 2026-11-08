@@ -14,8 +14,9 @@
 // Failsafe timeout: CONTROLLER_LINK_TIMEOUT_MS in controller.h.
 
 // Hard cap on motor output (= PWM duty %), on top of the mode limits.
-// 50 for now: both limited (75) and full (100) end up at 50.
-#define DRIVE_OUTPUT_CAP 50
+// 100 = no extra cap: limited ends at 75, full at 100.
+// Lower it (e.g. 50) to limit both modes again.
+#define DRIVE_OUTPUT_CAP 100
 #define DRIVE_LIMITED_MAX 75
 #define DRIVE_FULL_MAX 100
 

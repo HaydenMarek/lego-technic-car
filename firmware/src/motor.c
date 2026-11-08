@@ -13,8 +13,8 @@
 #define MOTOR_PWM_HZ 20000 // BTS7960 allows up to ~25 kHz; 20 kHz is above hearing
 
 // +1 or -1. Flip if positive throttle drives the car backwards.
-// The old build needed -1; the new wiring is not checked yet.
-#define MOTOR_DIRECTION 1
+// -1: with +1 the right trigger drove backwards (owner, 2026-11-08).
+#define MOTOR_DIRECTION -1
 
 static uint slice;
 static uint32_t top; // PWM counter wraps at top; duty 100 % = top + 1

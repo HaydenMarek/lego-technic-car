@@ -15,9 +15,10 @@ build. Start from them, then retune on the new car.
 7. `LB` + `RB` together: **full power** (100 %). The old build showed a red light.
 8. `B` in full power: back to limited. `B` in limited or unarmed: stop.
 
-**Pico 2 W firmware now:** output is also capped at **50 %**
-(`DRIVE_OUTPUT_CAP` in `firmware/src/drive.h`). So limited and full both
-end at 50 % for now. Raise the cap only after current protection is built.
+**Pico 2 W firmware now:** no extra cap. Limited = 75 %, full = 100 %
+(`DRIVE_OUTPUT_CAP` = 100 in `firmware/src/drive.h`, raised from 50 on
+2026-11-08 by the owner). Current protection is **not** built yet, and
+there is still no fuse. Set the cap back to 50 to limit both modes again.
 Currents measured at 50 %: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md#results).
 Gyro assist and current protection are not built yet.
 

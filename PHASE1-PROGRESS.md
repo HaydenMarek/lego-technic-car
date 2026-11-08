@@ -1,7 +1,9 @@
 # PHASE 1 PROGRESS
 
 Phase 1 = drive only ([WIRING.md](WIRING.md#phase-1-drive-only-now)).
-Output capped at 50 % (`DRIVE_OUTPUT_CAP`, [DRIVING.md](DRIVING.md#start-and-arming)).
+Output cap raised from 50 % to 100 % on 2026-11-08 (`DRIVE_OUTPUT_CAP`,
+[DRIVING.md](DRIVING.md#start-and-arming)). Limited = 75 %, full = 100 %.
+Measurements below were made at the 50 % cap.
 
 ## Status
 
@@ -9,6 +11,8 @@ Output capped at 50 % (`DRIVE_OUTPUT_CAP`, [DRIVING.md](DRIVING.md#start-and-arm
 | --- | --- | --- |
 | Phase 1 wiring built | Done | Owner |
 | Both buggy motors drive at 50 % | Works | Seen on the car (owner, 2026-11-04) |
+| Cap raised to 100 %, flashed over Wi-Fi | Works | Seen on the car (owner, throttle test, 2026-11-08) |
+| Right trigger drives forward | Was backwards. `MOTOR_DIRECTION` set to −1, not flashed yet | Firmware builds |
 | [Bench test](firmware/README.md#first-bench-test-wheels-off-the-ground-owner-at-s2) step 3: 5 s hold, no `FAILSAFE` | Not recorded | |
 | Bench test step 4: controller off stops motors in ~500 ms | Not recorded | |
 | Motor current measured | In progress | Multimeter, see below |
@@ -78,6 +82,8 @@ Pico 2 W, 5 V buck, BTS7960 logic. Motors not running.
 ### Motor current
 
 Throttle: full trigger = 50 % output. Fill one row per measurement.
+Rows 1–3 were measured with `MOTOR_DIRECTION` = 1, so "Forward" (right
+trigger) really drove the car backwards. Current was about the same both ways.
 Load = what stops the wheels: none, hand brake, car on floor, stall.
 
 | # | Direction | Load | Meter position | Battery V | Current (A) | Notes |

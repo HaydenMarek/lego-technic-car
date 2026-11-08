@@ -1,6 +1,6 @@
 // Driving firmware: Xbox controller -> BTS7960 motors + steering servo.
 // Logic is in drive.c (DRIVING.md). No gyro, no current protection yet.
-// Motor output is capped at DRIVE_OUTPUT_CAP (50 %).
+// Motor output: limited 75 %, full 100 % (DRIVE_OUTPUT_CAP = 100, no extra cap).
 
 #include <stdio.h>
 

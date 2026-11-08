@@ -3,8 +3,8 @@
 How the Pico 2 W build is wired. Based on
 [the block diagram](assets/top-level-graph.png).
 
-**Status:** phase 1 is built and drives at 50 % (seen on the car, owner,
-2026-11-04). Results and measurements: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md).
+**Status:** phase 1 is built and drove at 50 % (seen on the car, owner,
+2026-11-04). Firmware cap raised to 100 % on 2026-11-08. Results and measurements: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md).
 Everything after phase 1 is still plan only.
 Lessons behind these choices are in [KNOWLEDGE.md](KNOWLEDGE.md).
 
