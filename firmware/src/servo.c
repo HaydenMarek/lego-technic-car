@@ -8,10 +8,11 @@
 
 // Pulse widths in microseconds. NOT MEASURED: find the real limits with the
 // wheels off the ground before fitting the linkage (WIRING.md, Servo).
-// On a 360° servo, 500..2500 us is the full turn, so 150 us is about 27°.
+// On a 360° servo, 500..2500 us is the full turn (~5.6 us per degree),
+// so 373 us is about 67°. Was 150 (27°); +40° each side after fitting.
 #define SERVO_CENTER_US 1500
-#define SERVO_RANGE_US 150 // full stick = center +/- this
-#define SERVO_DIRECTION 1  // flip to -1 if left stick steers right
+#define SERVO_RANGE_US 373 // full stick = center +/- this
+#define SERVO_DIRECTION 1  // 1: checked on the car after fitting (-1 was wrong)
 
 #define SERVO_PERIOD_US 20000 // 50 Hz
 

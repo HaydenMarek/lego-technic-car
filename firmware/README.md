@@ -48,8 +48,8 @@ First clone: `git submodule update --init` (Bluepad32).
 | `DRIVE_OUTPUT_CAP` | `drive.h` | 100 | Max PWM duty %, on top of the mode limits. 100 = no extra cap. |
 | `MOTOR_DIRECTION` | `motor.c` | −1 | Flip if the right trigger drives backwards. Set to −1 on 2026-11-08 (+1 drove backwards). |
 | `SERVO_CENTER_US` | `servo.c` | 1500 | Wheels straight. Not measured. |
-| `SERVO_RANGE_US` | `servo.c` | 150 | Full stick = center ± this (~27° on a 360° servo). Not measured. |
-| `SERVO_DIRECTION` | `servo.c` | 1 | Set −1 if the stick steers the wrong way. |
+| `SERVO_RANGE_US` | `servo.c` | 373 | Full stick = center ± this (~67° on a 360° servo). Was 150 (~27°), widened by 40° each side after fitting. |
+| `SERVO_DIRECTION` | `servo.c` | 1 | Set back to 1 after fitting on the car (−1 steered the wrong way). Change sign if the stick steers the wrong way. |
 | `STEER_DEADZONE` | `drive.h` | 10 | Stick % treated as center |
 | `MOTOR_PWM_HZ` | `motor.c` | 20000 | BTS7960 max ~25 kHz |
 
