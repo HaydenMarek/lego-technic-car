@@ -20,7 +20,7 @@ build. Start from them, then retune on the new car.
 2026-11-08 by the owner). Current protection is **not** built yet, and
 there is still no fuse. Set the cap back to 50 to limit both modes again.
 Currents measured at 50 %: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md#results).
-Gyro assist and current protection are not built yet.
+Gyro drift assist is built (see below). Current protection is not.
 
 ## Throttle
 
@@ -124,8 +124,26 @@ Each 20 ms frame:
 
 Notes:
 
-- "Steering degree" was the LEGO steering motor's angle. Servo angles are
-  different, so `3.0` and the 40° cap need retuning.
+- "Steering degree" was the LEGO steering motor's angle. The Pico firmware
+  uses **steering %** (−100…100) with the same numbers: 3.0 °/s per %, max
+  40 %, 5 % per frame. Not tuned on this car yet.
 - **Sign check:** car unarmed, stick centered. Turn the car clockwise by hand.
-  The wheels should steer counter-clockwise. If not, set `YAW_SIGN = -1`.
+  The wheels should steer counter-clockwise. If not, flip `ASSIST_YAW_SIGN`.
+- Counter-steering a slide below 180 °/s: the assist **takes away**
+  counter-steer to keep the slide going (step 5). If the car spins out
+  instead, lower `ASSIST_DRIFT_YAW`.
 - Python version of this code: `hub/control.py` in tag `legacy-arduino-hub`.
+
+**Pico 2 W firmware** (`firmware/src/assist.c`, `gyro.c`). Proof: PC tests
+pass, firmware builds. Not seen on the car yet.
+
+- Settings: top of `firmware/src/assist.h`. `ASSIST_YAW_SIGN` = −1 (chip
+  face up). Not checked yet.
+- Gyro: MPU6500 Z axis, ±1000 °/s, chip low-pass 41 Hz, read every 20 ms.
+- Boot: the gyro measures its zero offset for ~1 s. **Car must stand still.**
+- `Y` toggles assist on/off (starts on). Use it to compare on the car.
+- Assist runs while the controller is connected, also unarmed (for the
+  sign check). Failsafe and OTA: steering centered, no assist.
+- No gyro found, or a read fails: drive without assist. The car still drives.
+- Tune in this order: sign check, then `ASSIST_GAIN` (twitchy or
+  oscillating: lower it), then `ASSIST_MAX`.

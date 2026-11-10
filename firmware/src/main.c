@@ -1,5 +1,5 @@
 // Driving firmware: Xbox controller -> BTS7960 motors + steering servo.
-// Logic is in drive.c (DRIVING.md). No gyro, no current protection yet.
+// Logic is in drive.c and assist.c (DRIVING.md). No current protection yet.
 // Motor output: limited 75 %, full 100 % (DRIVE_OUTPUT_CAP = 100, no extra cap).
 
 #include <stdio.h>
@@ -10,8 +10,10 @@
 #include <pico/stdlib.h>
 #include <uni.h>
 
+#include "assist.h"
 #include "controller.h"
 #include "drive.h"
+#include "gyro.h"
 #include "motor.h"
 #include "ota.h"
 #include "servo.h"
@@ -21,9 +23,49 @@
 #define STATUS_EVERY_FRAMES 25 // status line every 500 ms while armed
 
 static drive_t drive;
+static assist_t assist;
+static bool assist_on = true; // Y toggles it
+static uint16_t prev_buttons = 0xFFFF; // for the Y edge; held at connect = no toggle
+static bool gyro_failing;
+static float last_yaw;
 static btstack_timer_source_t drive_timer;
 static uint32_t frame;
 static bool had_input;
+
+// Driver steering + gyro correction. Without input, a gyro or with assist
+// off: the driver's steering unchanged.
+static int steer_with_assist(const pad_state_t *input, drive_out_t out) {
+    if (input) {
+        uint16_t pressed = input->buttons & (uint16_t)~prev_buttons;
+        prev_buttons = input->buttons;
+        if ((pressed & PAD_Y) && gyro_ok()) {
+            assist_on = !assist_on;
+            printf("drift assist %s\n", assist_on ? "ON" : "OFF");
+        }
+    } else {
+        prev_buttons = 0xFFFF;
+    }
+
+    float yaw;
+    if (!input || !assist_on || !gyro_ok()) {
+        assist_reset(&assist);
+        return out.steer;
+    }
+    if (!gyro_read_yaw(&yaw)) {
+        if (!gyro_failing) {
+            printf("gyro: read failed, no assist until it reads again\n");
+        }
+        gyro_failing = true;
+        assist_reset(&assist);
+        return out.steer;
+    }
+    if (gyro_failing) {
+        printf("gyro: reading again\n");
+        gyro_failing = false;
+    }
+    last_yaw = yaw;
+    return assist_step(&assist, out.steer, yaw, out.motor);
+}
 
 // Runs every DRIVE_FRAME_MS on the Bluetooth thread (same as controller.c).
 static void on_drive_tick(btstack_timer_source_t *ts) {
@@ -43,8 +85,9 @@ static void on_drive_tick(btstack_timer_source_t *ts) {
 
     drive_mode_t before = drive.mode;
     drive_out_t out = drive_step(&drive, input);
+    int steer = steer_with_assist(input, out);
     motor_set(out.motor);
-    servo_set(out.steer);
+    servo_set(steer);
 
     if (had_input && input == NULL) {
         printf(ota_active() ? "OTA: update started, coasting\n"
@@ -58,8 +101,9 @@ static void on_drive_tick(btstack_timer_source_t *ts) {
         printf("mode %s -> %s\n", drive_mode_name(before), drive_mode_name(drive.mode));
     }
     if (input && drive.mode != DRIVE_UNARMED && frame % STATUS_EVERY_FRAMES == 0) {
-        printf("%s throttle %4d motor %4d steer %4d\n", drive_mode_name(drive.mode),
-               drive_throttle_percent(input), out.motor, out.steer);
+        printf("%s throttle %4d motor %4d steer %4d -> %4d yaw %6.1f\n",
+               drive_mode_name(drive.mode), drive_throttle_percent(input), out.motor,
+               out.steer, steer, (double)last_yaw);
     }
 
     btstack_run_loop_set_timer(ts, DRIVE_FRAME_MS);
@@ -70,11 +114,13 @@ int main(void) {
     motor_init(); // first: bridge off (coast)
     servo_init(); // center
     drive_init(&drive);
+    assist_reset(&assist);
 
     stdio_init_all();
     if (watchdog_caused_reboot()) {
         printf("WARNING: reset by watchdog\n");
     }
+    gyro_init(); // ~1 s, car must stand still. No gyro: drive without assist.
 
     // Starts the CYW43 chip: Wi-Fi/Bluetooth radio and the onboard LED.
     if (cyw43_arch_init()) {
@@ -92,7 +138,8 @@ int main(void) {
     btstack_run_loop_set_timer(&drive_timer, DRIVE_FRAME_MS);
     btstack_run_loop_add_timer(&drive_timer);
 
-    printf("car firmware: output cap %d %%, no gyro\n", DRIVE_OUTPUT_CAP);
+    printf("car firmware: output cap %d %%, drift assist %s\n", DRIVE_OUTPUT_CAP,
+           gyro_ok() ? "ON (Y toggles)" : "off (no gyro)");
     btstack_run_loop_execute(); // never returns; everything else runs in callbacks
     return 0;
 }

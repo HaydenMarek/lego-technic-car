@@ -7,7 +7,9 @@ motors + steering servo, as in [DRIVING.md](../DRIVING.md).
 
 - Motor output: limited 75 %, full 100 % PWM duty. `DRIVE_OUTPUT_CAP` = 100
   (no extra cap; was 50 until 2026-11-08).
-- Not built yet: gyro drift assist, current protection.
+- Gyro drift assist (MPU6500): built, PC tests pass, not seen on the car.
+  `Y` toggles it. No gyro wired = drives without it.
+- Not built yet: current protection.
 - Status: builds, PC tests pass. Serial test passed 2026-11-03 (Pico
   replied, USB only): arming, modes, 50 % cap, steering values, steady
   trigger, controller-off failsafe. **Servo and motors not tested yet.**
@@ -25,6 +27,8 @@ First clone: `git submodule update --init` (Bluepad32).
 | --- | --- |
 | `src/main.c` | Start-up order, 20 ms drive loop, watchdog, serial status |
 | `src/drive.c/.h` | Driving logic: arming, throttle, steering, ramps, failsafe. No Pico SDK, tested on PC. Settings are at the top of `drive.h`. |
+| `src/assist.c/.h` | Gyro drift assist (yaw-rate P control). No Pico SDK, tested on PC. Settings at the top of `assist.h`. |
+| `src/gyro.c/.h` | MPU6500 on I2C0 (GP4/GP5): Z yaw rate, zero offset at boot |
 | `src/motor.c/.h` | BTS7960: 20 kHz PWM on GP2/GP3, EN on GP6. 0 = coast. |
 | `src/servo.c/.h` | Servo: 50 Hz on GP15 |
 | `src/controller.c/.h` | Bluetooth: scan, auto-pair, reconnect, keep the latest state |
@@ -36,7 +40,7 @@ First clone: `git submodule update --init` (Bluepad32).
 | `partition_table.json` | A/B slots for OTA. Built into `build/pico2w/partition_table.uf2`. |
 | `.env.example` | Copy to `.env` (git-ignored): Wi-Fi name, password, OTA token |
 | `tools/ota.mjs` | PC upload tool (Node 22, no packages) |
-| `tests/` | PC tests (host gcc) for `drive.c`, `pad_text.c`, `ota_logic.c` |
+| `tests/` | PC tests (host gcc) for `drive.c`, `assist.c`, `pad_text.c`, `ota_logic.c` |
 | `cmake/pico_host_tools.cmake` | Downloads prebuilt picotool 2.1.1 (Windows) |
 | `cmake/ota_secrets.cmake` | Reads `.env`, writes `build/.../generated/ota_secrets.h` |
 | `external/bluepad32` | Git submodule, tag `4.2.0` |
@@ -51,11 +55,15 @@ First clone: `git submodule update --init` (Bluepad32).
 | `SERVO_RANGE_US` | `servo.c` | 373 | Full stick = center ± this (~67° on a 360° servo). Was 150 (~27°), widened by 40° each side after fitting. |
 | `SERVO_DIRECTION` | `servo.c` | 1 | Set back to 1 after fitting on the car (−1 steered the wrong way). Change sign if the stick steers the wrong way. |
 | `STEER_DEADZONE` | `drive.h` | 10 | Stick % treated as center |
+| `ASSIST_YAW_SIGN` | `assist.h` | −1 | Sign check in [DRIVING.md](../DRIVING.md#drift-assist-gyro). Not checked yet. |
+| `ASSIST_GAIN` | `assist.h` | 0.60 | Steering % per °/s. Twitchy or wobbling: lower it. |
+| `ASSIST_MAX` | `assist.h` | 40 | Max gyro correction, steering % |
 | `MOTOR_PWM_HZ` | `motor.c` | 20000 | BTS7960 max ~25 kHz |
 
 ## How it runs
 
 1. `motor_init()` first: EN low, so the bridge coasts. Then servo to center.
+   Then the gyro measures its zero offset (~1 s, car still).
 2. Bluetooth starts. A 20 ms BTstack timer runs `drive_step()`.
 3. Failsafe: no controller connected → disarm, coast, center steering.
    - The controller only sends a report when something changes, so the
@@ -85,14 +93,17 @@ from there, not from an IRQ or core 1.
 ```text
 boot: partition 0                                     -1 = no partition table (OTA off)
 wifi: joining "MyHomeWifi"
-car firmware: output cap 100 %, no gyro
+gyro: WHO_AM_I 0x70 at 0x68                           or "gyro: not found, drift assist off"
+gyro: offset -0.85 deg/s, spread 0.40                 car must stand still (~1 s)
+car firmware: output cap 100 %, drift assist ON (Y toggles)
 wifi: connected, 192.168.1.50 (lego-car.local), OTA port 4242
 waiting for controller (hold its pair button)...     every 5 s, LED blinks
 BLE link connected: interval 15.00 ms, latency 4, timeout 500 ms
 BLE link updated: ...                                 if the controller asks for new values
 input OK. Press A (triggers released) to arm.
 mode UNARMED -> LIMITED
-LIMITED throttle   45 motor   29 steer  -12          every 500 ms while armed
+LIMITED throttle   45 motor   29 steer  -12 ->   -8 yaw   10.3   every 500 ms while armed
+drift assist OFF                                      Y pressed
 DISCONNECTED 14:CB:65:7E:40:EE
 FAILSAFE: controller lost, coasting
 ```

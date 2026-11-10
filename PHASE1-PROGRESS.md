@@ -16,6 +16,9 @@ Measurements below were made at the 50 % cap.
 | [Bench test](firmware/README.md#first-bench-test-wheels-off-the-ground-owner-at-s2) step 3: 5 s hold, no `FAILSAFE` | Not recorded | |
 | Bench test step 4: controller off stops motors in ~500 ms | Not recorded | |
 | Motor current measured | In progress | Multimeter, see below |
+| MPU6500 fitted: X to the front, Y to the left (Z up) | Done | Owner, 2026-11-10 |
+| Gyro drift assist flashed over Wi-Fi | Upload OK, car back on Wi-Fi | Pico replied, 2026-11-10. Gyro found? Not checked (needs USB serial). |
+| Assist sign check (hand turn) | Not done | |
 
 ## Why measure current
 

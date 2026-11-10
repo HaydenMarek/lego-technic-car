@@ -12,6 +12,8 @@ Lessons behind these choices are in [KNOWLEDGE.md](KNOWLEDGE.md).
 
 Servo not here yet. Current sense comes in the next phase.
 The firmware needs no change for this phase.
+Gyro: the firmware supports it now (2026-11-09). Wire it as in
+[MPU6500](#mpu6500) to get drift assist. Without it the car drives normally.
 
 | Wire it | Leave it out |
 |---|---|
@@ -185,6 +187,9 @@ Specs below are from shop listings, not measured.
 
 - 3.3 V keeps the I2C lines at 3.3 V, even if the module has pull-ups.
 - Mount it flat, on the carrier board, away from the motors.
+- Fitted 2026-11-10: X arrow to the front, Y to the left, so Z points up.
+  Yaw = Z. Firmware `ASSIST_YAW_SIGN` = −1 matches this. Other mounting:
+  redo the sign check in [DRIVING.md](DRIVING.md#drift-assist-gyro).
 
 ## Battery voltage (optional)
 

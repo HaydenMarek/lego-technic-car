@@ -19,3 +19,8 @@ add_executable(test_ota_logic test_ota_logic.c ../src/ota_logic.c)
 target_include_directories(test_ota_logic PRIVATE ../src)
 target_compile_options(test_ota_logic PRIVATE -Wall -Wextra -Werror)
 add_test(NAME ota_logic COMMAND test_ota_logic)
+
+add_executable(test_assist test_assist.c ../src/assist.c)
+target_include_directories(test_assist PRIVATE ../src)
+target_compile_options(test_assist PRIVATE -Wall -Wextra -Werror)
+add_test(NAME assist COMMAND test_assist)

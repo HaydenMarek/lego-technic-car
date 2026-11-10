@@ -25,6 +25,8 @@ add_executable(car_firmware
     src/controller.c
     src/pad_text.c
     src/drive.c
+    src/assist.c
+    src/gyro.c
     src/motor.c
     src/servo.c
     src/ota.c
@@ -52,6 +54,7 @@ target_link_libraries(car_firmware PUBLIC
     pico_flash
     hardware_flash
     hardware_pwm
+    hardware_i2c
     hardware_watchdog
     pico_cyw43_arch_lwip_threadsafe_background
     pico_lwip_mdns
