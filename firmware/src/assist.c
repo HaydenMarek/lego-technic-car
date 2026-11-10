@@ -25,7 +25,8 @@ int assist_step(assist_t *a, int steer, float yaw_dps, int motor) {
     float want = (float)steer * ASSIST_YAW_PER_STEER;
 
     // 5. Rotating against the steering (driver counter-steers a slide):
-    //    hold a drift instead of fighting the driver.
+    //    the target is ASSIST_DRIFT_YAW, not the steering. Faster: open the
+    //    slide (more counter-steer). Slower: see ASSIST_DRIFT_TIGHTEN.
     //    The driver's steering counts less in a drift (ASSIST_DRIFT_DRIVER),
     //    ramped so entering or leaving a drift does not jump the servo.
     float mix_target = 1.0f;
@@ -47,11 +48,15 @@ int assist_step(assist_t *a, int steer, float yaw_dps, int motor) {
         corr = ASSIST_GAIN * (excess + ASSIST_DEADBAND);
     }
 
-    // 6b. No understeer help: outside a drift, a correction with the
-    //     opposite sign of the steering would add lock (out = steer - corr).
-    //     Drop it, so the servo never goes further than the driver's stick.
+    // 6b. Only work against the rotation (out = steer - corr).
+    //     Outside a drift: a correction with the opposite sign of the
+    //     steering would add lock. Drop it (no understeer help).
+    //     In a drift: a correction with the opposite sign of the yaw would
+    //     take counter-steer away and tighten the slide. Drop it, so the
+    //     assist only opens a drift that rotates faster than ASSIST_DRIFT_YAW.
     //     Before the slew limit, so an old correction fades out smoothly.
-    if (!ASSIST_UNDERSTEER_HELP && !drift && corr * (float)steer < 0.0f) {
+    if (drift ? (!ASSIST_DRIFT_TIGHTEN && corr * yaw < 0.0f)
+              : (!ASSIST_UNDERSTEER_HELP && corr * (float)steer < 0.0f)) {
         corr = 0.0f;
     }
 

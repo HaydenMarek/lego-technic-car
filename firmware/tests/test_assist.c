@@ -81,19 +81,34 @@ static void test_filter_smooths(void) {
     CHECK_EQ(rnd(a.filtered * 10.0f), rnd(raw(30) * ASSIST_FILTER_ALPHA * 10.0f));
 }
 
-// Driver counter-steers into a slide: target becomes the drift yaw, so the
-// assist does not fight the driver while yaw stays below it.
-static void test_drift_hold(void) {
+// Steady correction in a drift rotating at yaw deg/s (aligned, > 0, steering
+// < 0): target ASSIST_DRIFT_YAW. Without ASSIST_DRIFT_TIGHTEN only the
+// opening part (more counter-steer, corr > 0) is kept.
+static float drift_corr(float yaw) {
+    float c = corr_for(yaw - ASSIST_DRIFT_YAW);
+    if (!ASSIST_DRIFT_TIGHTEN && c < 0.0f) c = 0.0f;
+    if (c > ASSIST_MAX) c = ASSIST_MAX;
+    if (c < -ASSIST_MAX) c = -ASSIST_MAX;
+    return c;
+}
+
+// Driver counter-steers a slide (steering left, car rotating right).
+static void test_drift(void) {
     assist_t a;
     assist_reset(&a);
-    // Steering left (-20), car rotating right at 100 deg/s (a slide).
-    // want = +ASSIST_DRIFT_YAW, excess = 100 - ASSIST_DRIFT_YAW.
-    // Output = share * -20 - correction: below the drift
-    // yaw, the assist takes away counter-steer to keep the slide going.
-    CHECK_EQ(run(&a, -20, 100, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - corr_for(100.0f - ASSIST_DRIFT_YAW)));
-    // Spinning faster than the drift yaw: more counter-steer.
+    // Faster than the drift yaw: more counter-steer, the slide opens.
+    CHECK_EQ(run(&a, -20, 100, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - drift_corr(100)));
+    CHECK_EQ(run(&a, -20, 100, 50, 50) < -20, 1);
     assist_reset(&a);
-    CHECK_EQ(run(&a, -20, 200, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - corr_for(200.0f - ASSIST_DRIFT_YAW)));
+    CHECK_EQ(run(&a, -20, 200, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - drift_corr(200)));
+    // Slower than the drift yaw: never takes counter-steer away (no
+    // tightening), unless ASSIST_DRIFT_TIGHTEN.
+    float slow = ASSIST_DRIFT_ENTRY + 5.0f;
+    assist_reset(&a);
+    CHECK_EQ(run(&a, -20, slow, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - drift_corr(slow)));
+    if (!ASSIST_DRIFT_TIGHTEN) {
+        CHECK_EQ(run(&a, -20, slow, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f));
+    }
     // Below the entry rate it is not a drift: want = -60, excess = yaw + 60.
     // That correction adds lock, so without understeer help: driver only.
     float below = ASSIST_DRIFT_ENTRY - 1.0f;
@@ -191,7 +206,7 @@ int main(void) {
     test_hand_turn_counter_steers();
     test_clamp_and_slew();
     test_filter_smooths();
-    test_drift_hold();
+    test_drift();
     test_drift_driver_share();
     test_drift_share_ramps();
     test_no_understeer_help();

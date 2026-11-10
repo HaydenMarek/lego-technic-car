@@ -141,7 +141,7 @@ Notes:
   |---|---|---|
   | gain | 0.60 | 0.40 |
   | drift entry yaw | 20 | 25 |
-  | drift yaw | 180 | 120 |
+  | drift yaw | 180 | 60 |
   | deadband | 2 | 8 |
   | filter alpha | 0.65 | 0.85 |
   | max correction | 40 | 50 % |
@@ -155,9 +155,16 @@ Notes:
   lock. Set it to 1 to get that back.
 - **Sign check:** car unarmed, stick centered. Turn the car clockwise by hand.
   The wheels should steer counter-clockwise. If not, flip `ASSIST_YAW_SIGN`.
-- Counter-steering a slide below 180 °/s: the assist **takes away**
-  counter-steer to keep the slide going (step 5). If the car spins out
-  instead, lower `ASSIST_DRIFT_YAW`.
+- **Drift opens, never tightens** (`ASSIST_DRIFT_TIGHTEN` 0, Pico only,
+  2026-11-10). In a drift the assist only **adds** counter-steer when the
+  slide rotates faster than `ASSIST_DRIFT_YAW` (+ deadband): the turn gets
+  wider. Slower slides: your steering only.
+  - Why: the table's step 5 also **takes away** counter-steer below the
+    drift yaw, to keep the slide going. On the car this tightened the
+    drift (assist OFF drifted normally, sign check passed).
+  - Opens too early: raise `ASSIST_DRIFT_YAW`. Too late: lower it
+    (0 = open every slide). Set `ASSIST_DRIFT_TIGHTEN` 1 for the old
+    behaviour.
 - In a drift, `ASSIST_DRIFT_DRIVER` is the share of your steering used.
   Now 1.0 (all of it). Lower it (e.g. 0.6) to let the assist hold the drift
   more. The share ramps over 100 ms (`ASSIST_DRIFT_RAMP`), so the servo
@@ -166,7 +173,9 @@ Notes:
 
 **Pico 2 W firmware** (`firmware/src/assist.c`, `gyro.c`). Proof: PC tests
 pass, firmware builds. Softened values flashed over Wi-Fi 2026-11-10
-(Pico replied). Not seen on the car yet.
+(Pico replied). Seen on the car 2026-11-10 (owner): sign check OK
+(`ASSIST_YAW_SIGN` −1 is right), drift tightened with assist ON. Drift
+opening fix: PC tests pass, flashed over Wi-Fi 2026-11-10 (Pico replied).
 
 - Settings: top of `firmware/src/assist.h`. `ASSIST_YAW_SIGN` = −1 (chip
   face up). Not checked yet.

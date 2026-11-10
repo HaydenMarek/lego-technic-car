@@ -12,13 +12,14 @@
 
 // Flip to -1 if the wheels steer WITH a hand-turn instead of against it
 // (sign check in DRIVING.md). -1: chip face up, Z up, counter-clockwise is
-// +Z (right-hand rule), but +steer is right = clockwise. Not checked yet.
+// +Z (right-hand rule), but +steer is right = clockwise. Checked on the
+// car 2026-11-10 (owner): -1 is right.
 #define ASSIST_YAW_SIGN -1
 
 #define ASSIST_GAIN 0.40f           // steering % per deg/s of excess yaw
 #define ASSIST_YAW_PER_STEER 3.0f   // deg/s the driver "asks for" per steering %
 #define ASSIST_DRIFT_ENTRY 25.0f    // deg/s against the steering = drift
-#define ASSIST_DRIFT_YAW 120.0f     // deg/s held during a drift
+#define ASSIST_DRIFT_YAW 60.0f      // deg/s a drift may rotate before the assist opens it
 #define ASSIST_DEADBAND 8.0f        // deg/s of excess ignored (gyro noise)
 #define ASSIST_FILTER_ALPHA 0.85f   // 0..1, lower = smoother but later
 #define ASSIST_MAX 50.0f            // max correction, steering %
@@ -29,6 +30,11 @@
 // never steers further than the driver (no extra lock when the car turns
 // less than asked, e.g. slow or standing). 1: also adds steering.
 #define ASSIST_UNDERSTEER_HELP 0
+// 0: in a drift the assist only adds counter-steer (opens the slide when
+// it rotates faster than ASSIST_DRIFT_YAW), never takes it away.
+// 1: old Hub behaviour, also takes counter-steer away to hold the drift
+// at ASSIST_DRIFT_YAW (tightens slower slides).
+#define ASSIST_DRIFT_TIGHTEN 0
 
 // --- API -------------------------------------------------------------------
 
