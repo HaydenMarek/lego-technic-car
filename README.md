@@ -29,6 +29,43 @@ Note: If you want to make sure that you won't get surprised by faulty component,
 
 ![Block diagram: MPU6500 gyro feeds the Pico 2 W, which drives the steering servo and, through the BTS7960 H-bridge, the buggy motors](assets/top-level-graph.png)
 
+## Configuration
+
+Settings to adjust for your car. They are in `firmware/src/`. Rebuild and
+flash after a change.
+
+### Motor
+
+| Setting | File | Now | What it does |
+| --- | --- | --- | --- |
+| `MOTOR_DIRECTION` | `motor.c` | −1 | `1` or `-1`. Flip if the right trigger drives backwards. |
+| `DRIVE_OUTPUT_CAP` | `drive.h` | 100 | Hard limit on motor power, %. Lower it (e.g. 50) for a slower car. |
+| `DRIVE_LIMITED_MAX` | `drive.h` | 75 | Max power in limited mode, % |
+| `DRIVE_FULL_MAX` | `drive.h` | 100 | Max power in full mode, % |
+
+### Steering
+
+| Setting | File | Now | What it does |
+| --- | --- | --- | --- |
+| `SERVO_CENTER_US` | `servo.c` | 1500 | Servo pulse for wheels straight. Adjust if the car pulls to one side. |
+| `SERVO_RANGE_US` | `servo.c` | 373 | Steering angle. Full stick = center ± this. 373 ≈ 67° on a 360° servo (~5.6 µs per degree). |
+| `SERVO_DIRECTION` | `servo.c` | 1 | `1` or `-1`. Flip if the stick steers the wrong way. |
+| `STEER_DEADZONE` | `drive.h` | 10 | Stick % treated as center |
+| `STEER_EXPONENT` | `drive.h` | 2 | Steering curve. 1 = linear, 2 = finer control near center. |
+
+### Gyro (drift assist)
+
+All in `assist.h`. How to tune: [DRIVING.md](DRIVING.md#drift-assist-gyro).
+
+| Setting | Now | What it does |
+| --- | --- | --- |
+| `ASSIST_YAW_SIGN` | −1 | `1` or `-1`. Flip if the wheels turn *with* the car when you rotate it by hand. Check this first. |
+| `ASSIST_GAIN` | 0.60 | How hard the gyro counter-steers. Twitchy or wobbling: lower it. |
+| `ASSIST_MAX` | 40 | Max gyro correction, steering % |
+| `ASSIST_DRIFT_YAW` | 180 | Rotation speed (°/s) held during a drift |
+| `ASSIST_DRIFT_ENTRY` | 20 | Rotation (°/s) against the steering that counts as a drift |
+| `ASSIST_FILTER_ALPHA` | 0.65 | Smoothing, 0–1. Lower = smoother but slower to react. |
+
 ## Docs
 
 - [WIRING.md](WIRING.md): how the Pico 2 W build is wired (pins, power, parts).
