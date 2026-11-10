@@ -87,16 +87,19 @@ static void test_drift_hold(void) {
     assist_t a;
     assist_reset(&a);
     // Steering left (-20), car rotating right at 100 deg/s (a slide).
-    // want = +180, excess = -80 -> correction about -46 (needs ASSIST_MAX >= 48).
-    // Output = share * -20 - correction (0.7: about +32): below the drift
+    // want = +ASSIST_DRIFT_YAW, excess = 100 - ASSIST_DRIFT_YAW.
+    // Output = share * -20 - correction: below the drift
     // yaw, the assist takes away counter-steer to keep the slide going.
-    CHECK_EQ(run(&a, -20, 100, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - corr_for(-80)));
+    CHECK_EQ(run(&a, -20, 100, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - corr_for(100.0f - ASSIST_DRIFT_YAW)));
     // Spinning faster than the drift yaw: more counter-steer.
     assist_reset(&a);
-    CHECK_EQ(run(&a, -20, 200, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - corr_for(20)));
-    // Below the entry rate (19 deg/s) it is not a drift: want = -60, full share.
+    CHECK_EQ(run(&a, -20, 200, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - corr_for(200.0f - ASSIST_DRIFT_YAW)));
+    // Below the entry rate it is not a drift: want = -60, excess = yaw + 60.
+    // That correction adds lock, so without understeer help: driver only.
+    float below = ASSIST_DRIFT_ENTRY - 1.0f;
     assist_reset(&a);
-    CHECK_EQ(run(&a, -20, 19, 50, 50), rnd(-20.0f - corr_for(79)));
+    CHECK_EQ(run(&a, -20, below, 50, 50),
+             ASSIST_UNDERSTEER_HELP ? rnd(-20.0f - corr_for(below + 60.0f)) : -20);
 }
 
 // In a drift the driver's steering counts ASSIST_DRIFT_DRIVER:
@@ -110,20 +113,60 @@ static void test_drift_driver_share(void) {
     CHECK_EQ(light - heavy, rnd(ASSIST_DRIFT_DRIVER * 20.0f));
 }
 
+static float fmaxf_(float a, float b) { return a > b ? a : b; }
+static float fminf_(float a, float b) { return a < b ? a : b; }
+
 // The share ramps (ASSIST_DRIFT_RAMP per frame) in and out of a drift.
+// With ASSIST_DRIFT_DRIVER = 1 it simply stays at 1.
 static void test_drift_share_ramps(void) {
     assist_t a;
     assist_reset(&a);
-    assist_step(&a, -20, raw(100), 50); // filtered 65 deg/s: drift
-    CHECK_EQ(rnd(a.driver_mix * 100.0f), rnd((1.0f - ASSIST_DRIFT_RAMP) * 100.0f));
+    assist_step(&a, -20, raw(100), 50); // filtered 100 * alpha deg/s: drift
+    CHECK_EQ(rnd(a.driver_mix * 100.0f),
+             rnd(fmaxf_(ASSIST_DRIFT_DRIVER, 1.0f - ASSIST_DRIFT_RAMP) * 100.0f));
     run(&a, -20, 100, 50, 50);
     CHECK_EQ(rnd(a.driver_mix * 100.0f), rnd(ASSIST_DRIFT_DRIVER * 100.0f));
     // Drift over (steering with the rotation): ramps back up, not a jump.
     assist_step(&a, 20, raw(100), 50);
     CHECK_EQ(rnd(a.driver_mix * 100.0f),
-             rnd((ASSIST_DRIFT_DRIVER + ASSIST_DRIFT_RAMP) * 100.0f));
+             rnd(fminf_(1.0f, ASSIST_DRIFT_DRIVER + ASSIST_DRIFT_RAMP) * 100.0f));
     run(&a, 20, 100, 50, 50);
     CHECK_EQ(rnd(a.driver_mix * 100.0f), 100);
+}
+
+// Car turns less than asked (standing, slow, understeer): without
+// understeer help the servo gets exactly the driver's steering.
+static void test_no_understeer_help(void) {
+    assist_t a;
+    assist_reset(&a);
+    int out = run(&a, 30, 0, 0, 50); // standing still, 30 % right
+    // want = 90, excess = -90: that correction would add lock.
+    CHECK_EQ(out, ASSIST_UNDERSTEER_HELP ? rnd(30.0f - corr_for(-90)) : 30);
+    assist_reset(&a);
+    // Turning left 20 deg/s, asked for 90: excess = 70.
+    CHECK_EQ(run(&a, -30, -20, 50, 50), ASSIST_UNDERSTEER_HELP ? rnd(-30.0f - corr_for(70)) : -30);
+}
+
+// Over-rotation (yaw more than asked, same way) is still corrected.
+static void test_over_rotation_corrected(void) {
+    assist_t a;
+    assist_reset(&a);
+    // want = 60, yaw 100: excess 40 -> take steering away.
+    CHECK_EQ(run(&a, 20, 100, 50, 50), rnd(20.0f - corr_for(40)));
+    assist_reset(&a);
+    CHECK_EQ(run(&a, -20, -100, 50, 50), rnd(-20.0f + corr_for(40)));
+}
+
+// A blocked correction fades out by ASSIST_SLEW per frame, no jump.
+static void test_blocked_correction_fades(void) {
+    assist_t a;
+    assist_reset(&a);
+    run(&a, 0, 500, 50, 50); // correction at +ASSIST_MAX
+    a.filtered = 0.0f;       // rotation stops at once
+    // Steering right 20, no yaw: the new correction is blocked (it adds lock).
+    CHECK_EQ(assist_step(&a, 20, raw(0), 50), rnd(20.0f - (ASSIST_MAX - ASSIST_SLEW)));
+    // Later: exactly the driver's steering.
+    CHECK_EQ(run(&a, 20, 0, 50, 50), ASSIST_UNDERSTEER_HELP ? rnd(20.0f - corr_for(-60)) : 20);
 }
 
 static void test_reverse_off(void) {
@@ -151,6 +194,9 @@ int main(void) {
     test_drift_hold();
     test_drift_driver_share();
     test_drift_share_ramps();
+    test_no_understeer_help();
+    test_over_rotation_corrected();
+    test_blocked_correction_fades();
     test_reverse_off();
     test_output_clamped();
     if (failures) {

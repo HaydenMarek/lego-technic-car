@@ -29,7 +29,9 @@ int assist_step(assist_t *a, int steer, float yaw_dps, int motor) {
     //    The driver's steering counts less in a drift (ASSIST_DRIFT_DRIVER),
     //    ramped so entering or leaving a drift does not jump the servo.
     float mix_target = 1.0f;
-    if (yaw * (float)steer < 0.0f && (yaw >= ASSIST_DRIFT_ENTRY || yaw <= -ASSIST_DRIFT_ENTRY)) {
+    bool drift = yaw * (float)steer < 0.0f &&
+                 (yaw >= ASSIST_DRIFT_ENTRY || yaw <= -ASSIST_DRIFT_ENTRY);
+    if (drift) {
         want = yaw > 0.0f ? ASSIST_DRIFT_YAW : -ASSIST_DRIFT_YAW;
         mix_target = ASSIST_DRIFT_DRIVER;
     }
@@ -43,6 +45,14 @@ int assist_step(assist_t *a, int steer, float yaw_dps, int motor) {
         corr = ASSIST_GAIN * (excess - ASSIST_DEADBAND);
     } else if (excess < -ASSIST_DEADBAND) {
         corr = ASSIST_GAIN * (excess + ASSIST_DEADBAND);
+    }
+
+    // 6b. No understeer help: outside a drift, a correction with the
+    //     opposite sign of the steering would add lock (out = steer - corr).
+    //     Drop it, so the servo never goes further than the driver's stick.
+    //     Before the slew limit, so an old correction fades out smoothly.
+    if (!ASSIST_UNDERSTEER_HELP && !drift && corr * (float)steer < 0.0f) {
+        corr = 0.0f;
     }
 
     // 7. Limited authority.

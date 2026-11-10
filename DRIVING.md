@@ -134,18 +134,34 @@ Each 20 ms frame:
 Notes:
 
 - "Steering degree" was the LEGO steering motor's angle. The Pico firmware
-  uses **steering %** (−100…100), 3.0 °/s per %. Changed from the table
-  after driving: max correction 80 % (was 40), 10 % per frame (was 5),
-  filter alpha 0.85 (was 0.65, reacts sooner), deadband 8 °/s (was 2).
+  uses **steering %** (−100…100), 3.0 °/s per %.
+- **Pico values now** (softened 2026-11-10 for more driver control):
+
+  | Setting | Table | Pico now |
+  |---|---|---|
+  | gain | 0.60 | 0.40 |
+  | drift entry yaw | 20 | 25 |
+  | drift yaw | 180 | 120 |
+  | deadband | 2 | 8 |
+  | filter alpha | 0.65 | 0.85 |
+  | max correction | 40 | 50 % |
+  | max change per frame | 5 | 5 % |
+  | driver share in a drift | – | 1.0 (all) |
+
+- **No understeer help** (`ASSIST_UNDERSTEER_HELP` 0, Pico only). Outside a
+  drift, the assist only takes steering away or counter-steers. It never
+  steers further than your stick. Before: when the car turned less than
+  asked (slow or standing), the assist added lock, so 65 % stick gave full
+  lock. Set it to 1 to get that back.
 - **Sign check:** car unarmed, stick centered. Turn the car clockwise by hand.
   The wheels should steer counter-clockwise. If not, flip `ASSIST_YAW_SIGN`.
 - Counter-steering a slide below 180 °/s: the assist **takes away**
   counter-steer to keep the slide going (step 5). If the car spins out
   instead, lower `ASSIST_DRIFT_YAW`.
-- In a drift, only 60 % of your steering is used (`ASSIST_DRIFT_DRIVER`
-  0.6), so small corrections do not overpower the assist. The share ramps
-  over 100 ms (`ASSIST_DRIFT_RAMP`), so the servo does not jump when a
-  drift starts or ends.
+- In a drift, `ASSIST_DRIFT_DRIVER` is the share of your steering used.
+  Now 1.0 (all of it). Lower it (e.g. 0.6) to let the assist hold the drift
+  more. The share ramps over 100 ms (`ASSIST_DRIFT_RAMP`), so the servo
+  does not jump when a drift starts or ends.
 - Python version of this code: `hub/control.py` in tag `legacy-arduino-hub`.
 
 **Pico 2 W firmware** (`firmware/src/assist.c`, `gyro.c`). Proof: PC tests

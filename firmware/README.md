@@ -57,9 +57,10 @@ First clone: `git submodule update --init` (Bluepad32).
 | `SERVO_DIRECTION` | `servo.c` | 1 | Set back to 1 after fitting on the car (−1 steered the wrong way). Change sign if the stick steers the wrong way. |
 | `STEER_DEADZONE` | `drive.h` | 10 | Stick % treated as center |
 | `ASSIST_YAW_SIGN` | `assist.h` | −1 | Sign check in [DRIVING.md](../DRIVING.md#drift-assist-gyro). Not checked yet. |
-| `ASSIST_GAIN` | `assist.h` | 0.60 | Steering % per °/s. Twitchy or wobbling: lower it. |
-| `ASSIST_MAX` | `assist.h` | 80 | Max gyro correction, steering % |
-| `ASSIST_DRIFT_DRIVER` | `assist.h` | 0.6 | Share of driver steering in a drift. Ramps 0.1 per frame (`ASSIST_DRIFT_RAMP`). |
+| `ASSIST_GAIN` | `assist.h` | 0.40 | Steering % per °/s. Twitchy or wobbling: lower it. |
+| `ASSIST_MAX` | `assist.h` | 50 | Max gyro correction, steering % |
+| `ASSIST_DRIFT_DRIVER` | `assist.h` | 1.0 | Share of driver steering in a drift. Ramps 0.1 per frame (`ASSIST_DRIFT_RAMP`). |
+| `ASSIST_UNDERSTEER_HELP` | `assist.h` | 0 | 0: outside a drift, never steer further than the stick. |
 | `MOTOR_PWM_HZ` | `motor.c` | 20000 | BTS7960 max ~25 kHz |
 
 ## How it runs
