@@ -17,8 +17,7 @@ static int trigger_percent(int32_t t) {
 
 const char *drive_mode_name(drive_mode_t m) {
     switch (m) {
-    case DRIVE_LIMITED: return "LIMITED";
-    case DRIVE_FULL: return "FULL";
+    case DRIVE_ARMED: return "ARMED";
     default: return "UNARMED";
     }
 }
@@ -78,6 +77,7 @@ int drive_ramp(int current, int target, int *hold_frames) {
 
 void drive_init(drive_t *d) {
     d->mode = DRIVE_UNARMED;
+    d->power = 0;
     d->prev_buttons = 0xFFFF; // count every button as held: arming needs a fresh press
     d->output = 0;
     d->hold_frames = 0;
@@ -96,22 +96,31 @@ drive_out_t drive_step(drive_t *d, const pad_state_t *pad) {
     bool combo_before = (d->prev_buttons & both_shoulders) == both_shoulders;
     d->prev_buttons = pad->buttons;
 
+    // B wins over A if both are new in the same frame: stopping is safer.
     if (pressed & PAD_B) {
-        d->mode = d->mode == DRIVE_FULL ? DRIVE_LIMITED : DRIVE_UNARMED;
-    } else if ((pressed & PAD_A) && d->mode == DRIVE_UNARMED &&
-               trigger_percent(pad->lt) <= DRIVE_ARM_TRIGGER_MAX &&
-               trigger_percent(pad->rt) <= DRIVE_ARM_TRIGGER_MAX) {
-        d->mode = DRIVE_LIMITED;
-    } else if (combo_now && !combo_before && d->mode == DRIVE_LIMITED) {
-        d->mode = DRIVE_FULL;
+        if (d->mode == DRIVE_ARMED && d->power > DRIVE_POWER_MIN) {
+            d->power -= DRIVE_POWER_STEP; // one step down
+        } else {
+            d->mode = DRIVE_UNARMED; // B at the lowest level (or unarmed): stop
+            d->power = 0;
+        }
+    } else if (pressed & PAD_A) {
+        if (d->mode == DRIVE_ARMED) {
+            d->power = imin(d->power + DRIVE_POWER_STEP, DRIVE_POWER_MAX); // one step up
+        } else if (trigger_percent(pad->lt) <= DRIVE_ARM_TRIGGER_MAX &&
+                   trigger_percent(pad->rt) <= DRIVE_ARM_TRIGGER_MAX) {
+            d->mode = DRIVE_ARMED; // arm, lowest level
+            d->power = DRIVE_POWER_MIN;
+        }
+    } else if (combo_now && !combo_before && d->mode == DRIVE_ARMED) {
+        d->power = DRIVE_POWER_MAX;
     }
 
     if (d->mode == DRIVE_UNARMED) { // stop = coast at once, no ramp
         d->output = 0;
         d->hold_frames = 0;
     } else {
-        int mode_max = d->mode == DRIVE_FULL ? DRIVE_FULL_MAX : DRIVE_LIMITED_MAX;
-        int max = imin(mode_max, DRIVE_OUTPUT_CAP);
+        int max = imin(d->power, DRIVE_OUTPUT_CAP);
         int target = drive_map_throttle(drive_throttle_percent(pad), max);
         d->output = drive_ramp(d->output, target, &d->hold_frames);
     }

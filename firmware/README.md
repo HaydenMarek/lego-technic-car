@@ -5,8 +5,9 @@ Pico 2 W firmware. C, Pico SDK 2.1.1, [Bluepad32](https://github.com/ricardoques
 It is the **driving firmware**: Xbox controller over Bluetooth → BTS7960
 motors + steering servo, as in [DRIVING.md](../DRIVING.md).
 
-- Motor output: limited 75 %, full 100 % PWM duty. `DRIVE_OUTPUT_CAP` = 100
-  (no extra cap; was 50 until 2026-11-08).
+- Motor output: power level 75…100 % PWM duty in 5 % steps (`A` up, `B`
+  down, `LB`+`RB` = 100). `DRIVE_OUTPUT_CAP` = 100 (no extra cap; was 50
+  until 2026-11-08).
 - Gyro drift assist (MPU6500): built, PC tests pass, not seen on the car.
   `Y` toggles it. No gyro wired = drives without it.
 - Not built yet: current protection.
@@ -57,7 +58,8 @@ First clone: `git submodule update --init` (Bluepad32).
 | `STEER_DEADZONE` | `drive.h` | 10 | Stick % treated as center |
 | `ASSIST_YAW_SIGN` | `assist.h` | −1 | Sign check in [DRIVING.md](../DRIVING.md#drift-assist-gyro). Not checked yet. |
 | `ASSIST_GAIN` | `assist.h` | 0.60 | Steering % per °/s. Twitchy or wobbling: lower it. |
-| `ASSIST_MAX` | `assist.h` | 40 | Max gyro correction, steering % |
+| `ASSIST_MAX` | `assist.h` | 80 | Max gyro correction, steering % |
+| `ASSIST_DRIFT_DRIVER` | `assist.h` | 0.7 | Share of driver steering in a drift. Ramps 0.1 per frame (`ASSIST_DRIFT_RAMP`). |
 | `MOTOR_PWM_HZ` | `motor.c` | 20000 | BTS7960 max ~25 kHz |
 
 ## How it runs
@@ -101,8 +103,9 @@ waiting for controller (hold its pair button)...     every 5 s, LED blinks
 BLE link connected: interval 15.00 ms, latency 4, timeout 500 ms
 BLE link updated: ...                                 if the controller asks for new values
 input OK. Press A (triggers released) to arm.
-mode UNARMED -> LIMITED
-LIMITED throttle   45 motor   29 steer  -12 ->   -8 yaw   10.3   every 500 ms while armed
+mode UNARMED -> ARMED
+power 80 %                                            A or B pressed
+ARMED  80% throttle   45 motor   40 steer  -12 ->   -8 yaw   10.3   every 500 ms while armed
 drift assist OFF                                      Y pressed
 DISCONNECTED 14:CB:65:7E:40:EE
 FAILSAFE: controller lost, coasting

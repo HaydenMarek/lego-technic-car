@@ -18,6 +18,9 @@ static int failures;
 
 static float raw(float aligned) { return ASSIST_YAW_SIGN * aligned; }
 
+// Round to nearest, like assist_step does.
+static int rnd(float v) { return (int)(v < 0.0f ? v - 0.5f : v + 0.5f); }
+
 // n frames with the same input, return the last output.
 static int run(assist_t *a, int steer, float yaw, int motor, int n) {
     int out = steer;
@@ -56,18 +59,19 @@ static void test_clamp_and_slew(void) {
     assist_t a;
     assist_reset(&a);
     // Huge yaw: the first frame moves at most ASSIST_SLEW.
-    CHECK_EQ(assist_step(&a, 0, raw(500), 50), -5);
-    CHECK_EQ(assist_step(&a, 0, raw(500), 50), -10);
+    CHECK_EQ(assist_step(&a, 0, raw(500), 50), -(int)ASSIST_SLEW);
+    CHECK_EQ(assist_step(&a, 0, raw(500), 50), -2 * (int)ASSIST_SLEW);
     // Then it stops at ASSIST_MAX.
-    CHECK_EQ(run(&a, 0, 500, 50, 50), -40);
+    CHECK_EQ(run(&a, 0, 500, 50, 50), -(int)ASSIST_MAX);
 }
 
 static void test_filter_smooths(void) {
     assist_t a;
     assist_reset(&a);
-    // One frame of 30 deg/s: filtered = 0.65 * 30 = 19.5 -> (19.5-2)*0.6 = 10.5,
-    // but slew limits to 5.
-    CHECK_EQ(assist_step(&a, 0, raw(30), 50), -5);
+    // One frame of 30 deg/s: the filter passes only ASSIST_FILTER_ALPHA of it
+    // (0.85: 25.5 deg/s).
+    assist_step(&a, 0, raw(30), 50);
+    CHECK_EQ(rnd(a.filtered * 10.0f), rnd(raw(30) * ASSIST_FILTER_ALPHA * 10.0f));
 }
 
 // Driver counter-steers into a slide: target becomes the drift yaw, so the
@@ -76,16 +80,44 @@ static void test_drift_hold(void) {
     assist_t a;
     assist_reset(&a);
     // Steering left (-20), car rotating right at 100 deg/s (a slide).
-    // want = +180, excess = -80 -> correction -46.8, clamped to -40.
-    // Output = -20 - (-40) = +20: below the drift yaw, the assist takes away
-    // counter-steer to keep the slide going (old Hub behaviour).
-    CHECK_EQ(run(&a, -20, 100, 50, 50), 20);
+    // want = +180, excess = -80 -> correction -46.8 (needs ASSIST_MAX >= 47).
+    // Output = share * -20 + 46.8 (0.7: +32.8): below the drift yaw, the
+    // assist takes away counter-steer to keep the slide going.
+    CHECK_EQ(run(&a, -20, 100, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f + 46.8f));
     // Spinning faster than the drift yaw: more counter-steer.
     assist_reset(&a);
-    CHECK_EQ(run(&a, -20, 200, 50, 50), -31); // excess 20 -> 18 * 0.6 = 10.8
-    // Below the entry rate (19 deg/s) it is not a drift: want = -60.
+    // excess 20 -> 10.8; share * -20 - 10.8
+    CHECK_EQ(run(&a, -20, 200, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - 10.8f));
+    // Below the entry rate (19 deg/s) it is not a drift: want = -60, full share.
     assist_reset(&a);
-    CHECK_EQ(run(&a, -20, 19, 50, 50), -60); // excess 79 -> clamped 40
+    CHECK_EQ(run(&a, -20, 19, 50, 50), -66); // excess 79 -> 46.2; -20 - 46.2
+}
+
+// In a drift the driver's steering counts ASSIST_DRIFT_DRIVER:
+// 20 % more counter-steer moves the servo only share * 20 % (0.7: 14 %).
+static void test_drift_driver_share(void) {
+    assist_t a;
+    assist_reset(&a);
+    int light = run(&a, -20, 100, 50, 50);
+    assist_reset(&a);
+    int heavy = run(&a, -40, 100, 50, 50);
+    CHECK_EQ(light - heavy, rnd(ASSIST_DRIFT_DRIVER * 20.0f));
+}
+
+// The share ramps (ASSIST_DRIFT_RAMP per frame) in and out of a drift.
+static void test_drift_share_ramps(void) {
+    assist_t a;
+    assist_reset(&a);
+    assist_step(&a, -20, raw(100), 50); // filtered 65 deg/s: drift
+    CHECK_EQ(rnd(a.driver_mix * 100.0f), rnd((1.0f - ASSIST_DRIFT_RAMP) * 100.0f));
+    run(&a, -20, 100, 50, 50);
+    CHECK_EQ(rnd(a.driver_mix * 100.0f), rnd(ASSIST_DRIFT_DRIVER * 100.0f));
+    // Drift over (steering with the rotation): ramps back up, not a jump.
+    assist_step(&a, 20, raw(100), 50);
+    CHECK_EQ(rnd(a.driver_mix * 100.0f),
+             rnd((ASSIST_DRIFT_DRIVER + ASSIST_DRIFT_RAMP) * 100.0f));
+    run(&a, 20, 100, 50, 50);
+    CHECK_EQ(rnd(a.driver_mix * 100.0f), 100);
 }
 
 static void test_reverse_off(void) {
@@ -111,6 +143,8 @@ int main(void) {
     test_clamp_and_slew();
     test_filter_smooths();
     test_drift_hold();
+    test_drift_driver_share();
+    test_drift_share_ramps();
     test_reverse_off();
     test_output_clamped();
     if (failures) {

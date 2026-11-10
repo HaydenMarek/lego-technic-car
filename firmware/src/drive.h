@@ -13,12 +13,15 @@
 #define DRIVE_FRAME_MS 20 // drive_step() is called this often
 // Failsafe timeout: CONTROLLER_LINK_TIMEOUT_MS in controller.h.
 
-// Hard cap on motor output (= PWM duty %), on top of the mode limits.
-// 100 = no extra cap: limited ends at 75, full at 100.
-// Lower it (e.g. 50) to limit both modes again.
+// Hard cap on motor output (= PWM duty %), on top of the power level.
+// 100 = no extra cap. Lower it (e.g. 50) to limit every level again.
 #define DRIVE_OUTPUT_CAP 100
-#define DRIVE_LIMITED_MAX 75
-#define DRIVE_FULL_MAX 100
+
+// Power level (max motor output, %) while armed. Arming starts at MIN.
+// A: +STEP, B: -STEP (B at MIN stops), LB+RB: straight to MAX.
+#define DRIVE_POWER_MIN 75
+#define DRIVE_POWER_MAX 100
+#define DRIVE_POWER_STEP 5
 
 #define DRIVE_NEUTRAL 2     // |throttle| <= this is neutral (percent)
 #define DRIVE_MIN_OUTPUT 10 // motors start moving at about this output
@@ -38,12 +41,12 @@
 
 typedef enum {
     DRIVE_UNARMED = 0, // steering works, motors coast
-    DRIVE_LIMITED,     // armed, max DRIVE_LIMITED_MAX (capped)
-    DRIVE_FULL,        // armed, max DRIVE_FULL_MAX (capped)
+    DRIVE_ARMED,       // throttle works, max = power (capped)
 } drive_mode_t;
 
 typedef struct {
     drive_mode_t mode;
+    int power;             // DRIVE_POWER_MIN..MAX while armed, 0 unarmed
     uint16_t prev_buttons; // for "new press" edges
     int output;            // current motor output, -100..100 (after ramp)
     int hold_frames;       // frames left to wait at 0 before reversing

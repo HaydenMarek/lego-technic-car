@@ -1,6 +1,6 @@
 // Driving firmware: Xbox controller -> BTS7960 motors + steering servo.
 // Logic is in drive.c and assist.c (DRIVING.md). No current protection yet.
-// Motor output: limited 75 %, full 100 % (DRIVE_OUTPUT_CAP = 100, no extra cap).
+// Motor output: power level 75..100 % in 5 % steps (A up, B down), no extra cap.
 
 #include <stdio.h>
 
@@ -84,6 +84,7 @@ static void on_drive_tick(btstack_timer_source_t *ts) {
     const pad_state_t *input = !ota_active() && controller_latest(&pad, &at_ms) ? &pad : NULL;
 
     drive_mode_t before = drive.mode;
+    int power_before = drive.power;
     drive_out_t out = drive_step(&drive, input);
     int steer = steer_with_assist(input, out);
     motor_set(out.motor);
@@ -100,9 +101,12 @@ static void on_drive_tick(btstack_timer_source_t *ts) {
     if (drive.mode != before) {
         printf("mode %s -> %s\n", drive_mode_name(before), drive_mode_name(drive.mode));
     }
+    if (drive.power != power_before && drive.mode == DRIVE_ARMED) {
+        printf("power %d %%\n", drive.power);
+    }
     if (input && drive.mode != DRIVE_UNARMED && frame % STATUS_EVERY_FRAMES == 0) {
-        printf("%s throttle %4d motor %4d steer %4d -> %4d yaw %6.1f\n",
-               drive_mode_name(drive.mode), drive_throttle_percent(input), out.motor,
+        printf("%s %3d%% throttle %4d motor %4d steer %4d -> %4d yaw %6.1f\n",
+               drive_mode_name(drive.mode), drive.power, drive_throttle_percent(input), out.motor,
                out.steer, steer, (double)last_yaw);
     }
 

@@ -11,14 +11,23 @@ build. Start from them, then retune on the new car.
 4. **Unarmed:** steering works, motors stay stopped.
 5. **Arm:** a *new* press of `A` (released, then pressed), with both
    triggers released (≤ 2 %).
-6. Armed starts in **limited power** (75 %). The old build showed a blue light.
-7. `LB` + `RB` together: **full power** (100 %). The old build showed a red light.
-8. `B` in full power: back to limited. `B` in limited or unarmed: stop.
+6. Armed starts at **75 % power**.
+7. Power steps of 5 %: 75 → 80 → 85 → 90 → 95 → 100.
 
-**Pico 2 W firmware now:** no extra cap. Limited = 75 %, full = 100 %
-(`DRIVE_OUTPUT_CAP` = 100 in `firmware/src/drive.h`, raised from 50 on
-2026-11-08 by the owner). Current protection is **not** built yet, and
-there is still no fuse. Set the cap back to 50 to limit both modes again.
+| Button (new press) | Armed | Unarmed |
+|---|---|---|
+| `A` | +5 % (max 100) | arm at 75 % |
+| `B` | −5 %. At 75 %: **stop** | nothing |
+| `LB` + `RB` | straight to 100 % | nothing |
+
+- Lowering power while driving slows down with the release ramp, no jump.
+- Holding a button counts once.
+- The old build had two levels: limited 75 % (blue light), full 100 % (red).
+
+**Pico 2 W firmware now:** no extra cap (`DRIVE_OUTPUT_CAP` = 100 in
+`firmware/src/drive.h`, raised from 50 on 2026-11-08 by the owner). Steps:
+`DRIVE_POWER_MIN/MAX/STEP`. Current protection is **not** built yet, and
+there is still no fuse. Set the cap back to 50 to limit every level again.
 Currents measured at 50 %: [PHASE1-PROGRESS.md](PHASE1-PROGRESS.md#results).
 Gyro drift assist is built (see below). Current protection is not.
 
@@ -27,7 +36,7 @@ Gyro drift assist is built (see below). Current protection is not.
 - Throttle = right trigger − left trigger, range −100…100.
 - −2…2 counts as neutral.
 - The motors start moving at about 10 %. So map trigger 3…100 onto
-  10…max (75 or 100):
+  10…max (power level, 75…100):
 
   ```text
   out = 10 + (|in| - 2) * (max - 10) / (100 - 2)    (keep the sign)
@@ -125,13 +134,18 @@ Each 20 ms frame:
 Notes:
 
 - "Steering degree" was the LEGO steering motor's angle. The Pico firmware
-  uses **steering %** (−100…100) with the same numbers: 3.0 °/s per %, max
-  40 %, 5 % per frame. Not tuned on this car yet.
+  uses **steering %** (−100…100), 3.0 °/s per %. Changed from the table
+  after driving: max correction 80 % (was 40), 10 % per frame (was 5),
+  filter alpha 0.85 (was 0.65, reacts sooner).
 - **Sign check:** car unarmed, stick centered. Turn the car clockwise by hand.
   The wheels should steer counter-clockwise. If not, flip `ASSIST_YAW_SIGN`.
 - Counter-steering a slide below 180 °/s: the assist **takes away**
   counter-steer to keep the slide going (step 5). If the car spins out
   instead, lower `ASSIST_DRIFT_YAW`.
+- In a drift, only 70 % of your steering is used (`ASSIST_DRIFT_DRIVER`
+  0.7), so small corrections do not overpower the assist. The share ramps
+  over 100 ms (`ASSIST_DRIFT_RAMP`), so the servo does not jump when a
+  drift starts or ends.
 - Python version of this code: `hub/control.py` in tag `legacy-arduino-hub`.
 
 **Pico 2 W firmware** (`firmware/src/assist.c`, `gyro.c`). Proof: PC tests

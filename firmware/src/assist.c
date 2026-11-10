@@ -7,6 +7,7 @@ static float fclamp(float v, float lo, float hi) {
 void assist_reset(assist_t *a) {
     a->filtered = 0.0f;
     a->correction = 0.0f;
+    a->driver_mix = 1.0f;
 }
 
 int assist_step(assist_t *a, int steer, float yaw_dps, int motor) {
@@ -25,9 +26,15 @@ int assist_step(assist_t *a, int steer, float yaw_dps, int motor) {
 
     // 5. Rotating against the steering (driver counter-steers a slide):
     //    hold a drift instead of fighting the driver.
+    //    The driver's steering counts less in a drift (ASSIST_DRIFT_DRIVER),
+    //    ramped so entering or leaving a drift does not jump the servo.
+    float mix_target = 1.0f;
     if (yaw * (float)steer < 0.0f && (yaw >= ASSIST_DRIFT_ENTRY || yaw <= -ASSIST_DRIFT_ENTRY)) {
         want = yaw > 0.0f ? ASSIST_DRIFT_YAW : -ASSIST_DRIFT_YAW;
+        mix_target = ASSIST_DRIFT_DRIVER;
     }
+    a->driver_mix = fclamp(mix_target, a->driver_mix - ASSIST_DRIFT_RAMP,
+                           a->driver_mix + ASSIST_DRIFT_RAMP);
 
     // 6. Deadband, shrunk so the correction starts at 0 at its edge.
     float excess = yaw - want;
@@ -46,6 +53,6 @@ int assist_step(assist_t *a, int steer, float yaw_dps, int motor) {
     a->correction = corr;
 
     // 9. Correct the driver's steering, round to nearest, keep in range.
-    float out = fclamp((float)steer - corr, -100.0f, 100.0f);
+    float out = fclamp(a->driver_mix * (float)steer - corr, -100.0f, 100.0f);
     return (int)(out < 0.0f ? out - 0.5f : out + 0.5f);
 }

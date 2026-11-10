@@ -31,7 +31,7 @@ static drive_out_t run(drive_t *d, const pad_state_t *pad, int n) {
     return o;
 }
 
-// Fresh drive, armed in LIMITED.
+// Fresh drive, armed at DRIVE_POWER_MIN.
 static drive_t armed(void) {
     drive_t d;
     drive_init(&d);
@@ -125,21 +125,77 @@ static void test_arm_needs_new_press_and_released_triggers(void) {
 
     drive_step(&d, &idle);
     drive_step(&d, &a);
-    CHECK_EQ(d.mode, DRIVE_LIMITED);
+    CHECK_EQ(d.mode, DRIVE_ARMED);
+}
+
+// Press and release one button (two frames).
+static void tap(drive_t *d, uint16_t button) {
+    pad_state_t press = {.buttons = button};
+    pad_state_t idle = {0};
+    drive_step(d, &press);
+    drive_step(d, &idle);
 }
 
 static void test_mode_limits(void) {
     drive_t d = armed();
+    CHECK_EQ(d.power, DRIVE_POWER_MIN);
     pad_state_t full = {.rt = 1023};
-    CHECK_EQ(run(&d, &full, 10).motor, DRIVE_LIMITED_MAX); // 75
+    CHECK_EQ(run(&d, &full, 10).motor, DRIVE_POWER_MIN); // 75
 
     pad_state_t combo = {.buttons = PAD_LB | PAD_RB, .rt = 1023};
     drive_step(&d, &combo);
-    CHECK_EQ(d.mode, DRIVE_FULL);
-    CHECK_EQ(run(&d, &combo, 10).motor, DRIVE_FULL_MAX); // 100, no extra cap
+    CHECK_EQ(d.power, DRIVE_POWER_MAX); // LB+RB: straight to 100
+    CHECK_EQ(run(&d, &combo, 10).motor, DRIVE_POWER_MAX); // no extra cap
 
     pad_state_t back = {.lt = 1023};
-    CHECK_EQ(run(&d, &back, 30).motor, -DRIVE_FULL_MAX);
+    CHECK_EQ(run(&d, &back, 30).motor, -DRIVE_POWER_MAX);
+}
+
+static void test_power_steps(void) {
+    drive_t d = armed();
+    // A: 75 -> 80 -> 85 -> 90 -> 95 -> 100, then stays at 100.
+    for (int want = 80; want <= 100; want += 5) {
+        tap(&d, PAD_A);
+        CHECK_EQ(d.power, want);
+    }
+    tap(&d, PAD_A);
+    CHECK_EQ(d.power, 100);
+    CHECK_EQ(d.mode, DRIVE_ARMED);
+
+    pad_state_t full = {.rt = 1023};
+    CHECK_EQ(run(&d, &full, 10).motor, 100);
+
+    // B: back down the same way, still armed at 75.
+    for (int want = 95; want >= 75; want -= 5) {
+        tap(&d, PAD_B);
+        CHECK_EQ(d.power, want);
+        CHECK_EQ(d.mode, DRIVE_ARMED);
+    }
+    // One more B at 75: stop.
+    tap(&d, PAD_B);
+    CHECK_EQ(d.mode, DRIVE_UNARMED);
+
+    // Re-arm starts at 75 again.
+    tap(&d, PAD_A);
+    CHECK_EQ(d.power, DRIVE_POWER_MIN);
+}
+
+static void test_power_step_needs_new_press(void) {
+    drive_t d = armed();
+    pad_state_t a = {.buttons = PAD_A};
+    run(&d, &a, 10); // held: one step only
+    CHECK_EQ(d.power, 80);
+}
+
+static void test_power_down_slows_gently(void) {
+    drive_t d = armed();
+    tap(&d, PAD_A);
+    tap(&d, PAD_A); // 85
+    pad_state_t full = {.rt = 1023};
+    CHECK_EQ(run(&d, &full, 10).motor, 85);
+    pad_state_t b_full = {.buttons = PAD_B, .rt = 1023};
+    CHECK_EQ(drive_step(&d, &b_full).motor, 85 - RAMP_RELEASE_STEP); // ramp, no jump
+    CHECK_EQ(run(&d, &full, 10).motor, 80);
 }
 
 static void test_b_steps_down(void) {
@@ -148,14 +204,14 @@ static void test_b_steps_down(void) {
     pad_state_t b = {.buttons = PAD_B};
     pad_state_t idle = {0};
     drive_step(&d, &combo);
-    CHECK_EQ(d.mode, DRIVE_FULL);
+    CHECK_EQ(d.power, 100);
     drive_step(&d, &b);
-    CHECK_EQ(d.mode, DRIVE_LIMITED);
+    CHECK_EQ(d.power, 95);
     drive_step(&d, &b); // still held: no second step
-    CHECK_EQ(d.mode, DRIVE_LIMITED);
+    CHECK_EQ(d.power, 95);
     drive_step(&d, &idle);
     drive_step(&d, &b);
-    CHECK_EQ(d.mode, DRIVE_UNARMED);
+    CHECK_EQ(d.power, 90);
 }
 
 static void test_b_stops_at_once(void) {
@@ -190,6 +246,9 @@ int main(void) {
     test_boot_unarmed();
     test_arm_needs_new_press_and_released_triggers();
     test_mode_limits();
+    test_power_steps();
+    test_power_step_needs_new_press();
+    test_power_down_slows_gently();
     test_b_steps_down();
     test_b_stops_at_once();
     test_failsafe();

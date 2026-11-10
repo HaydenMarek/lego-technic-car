@@ -40,8 +40,9 @@ flash after a change.
 | --- | --- | --- | --- |
 | `MOTOR_DIRECTION` | `motor.c` | −1 | `1` or `-1`. Flip if the right trigger drives backwards. |
 | `DRIVE_OUTPUT_CAP` | `drive.h` | 100 | Hard limit on motor power, %. Lower it (e.g. 50) for a slower car. |
-| `DRIVE_LIMITED_MAX` | `drive.h` | 75 | Max power in limited mode, % |
-| `DRIVE_FULL_MAX` | `drive.h` | 100 | Max power in full mode, % |
+| `DRIVE_POWER_MIN` | `drive.h` | 75 | Power level after arming, %. `B` here stops. |
+| `DRIVE_POWER_MAX` | `drive.h` | 100 | Highest power level (`A` steps, `LB`+`RB` jumps), % |
+| `DRIVE_POWER_STEP` | `drive.h` | 5 | `A` / `B` change the power level by this, % |
 
 ### Steering
 
@@ -61,10 +62,11 @@ All in `assist.h`. How to tune: [DRIVING.md](DRIVING.md#drift-assist-gyro).
 | --- | --- | --- |
 | `ASSIST_YAW_SIGN` | −1 | `1` or `-1`. Flip if the wheels turn *with* the car when you rotate it by hand. Check this first. |
 | `ASSIST_GAIN` | 0.60 | How hard the gyro counter-steers. Twitchy or wobbling: lower it. |
-| `ASSIST_MAX` | 40 | Max gyro correction, steering % |
+| `ASSIST_MAX` | 80 | Max gyro correction, steering % |
+| `ASSIST_DRIFT_DRIVER` | 0.7 | Share of your steering used during a drift. 1 = all. Lower = gyro holds the drift more. |
 | `ASSIST_DRIFT_YAW` | 180 | Rotation speed (°/s) held during a drift |
 | `ASSIST_DRIFT_ENTRY` | 20 | Rotation (°/s) against the steering that counts as a drift |
-| `ASSIST_FILTER_ALPHA` | 0.65 | Smoothing, 0–1. Lower = smoother but slower to react. |
+| `ASSIST_FILTER_ALPHA` | 0.85 | Smoothing, 0–1. Lower = smoother but slower to react. |
 
 ## Docs
 
