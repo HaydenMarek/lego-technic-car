@@ -63,12 +63,9 @@ All in `assist.h`. How to tune: [DRIVING.md](DRIVING.md#drift-assist-gyro).
 | `ASSIST_YAW_SIGN` | −1 | `1` or `-1`. Flip if the wheels turn *with* the car when you rotate it by hand. Check this first. |
 | `ASSIST_GAIN` | 0.40 | How hard the gyro counter-steers. Twitchy or wobbling: lower it. |
 | `ASSIST_MAX` | 50 | Max gyro correction, steering %. Below 100, so the gyro never fully overrides you. |
-| `ASSIST_DRIFT_DRIVER` | 1.0 | Share of your steering used during a drift. 1 = all. Lower = gyro holds the drift more. |
-| `ASSIST_DRIFT_YAW` | 60 | Rotation speed (°/s) a drift may reach before the gyro opens it (more counter-steer). Lower = opens sooner. |
-| `ASSIST_DRIFT_ENTRY` | 25 | Rotation (°/s) against the steering that counts as a drift. Lower = more sensitive. |
+| `ASSIST_STICK_PRIORITY` | 1.0 | The more you steer, the less the gyro does. 1 = full stick turns it off. Lower = gyro stays stronger while you steer. |
+| `ASSIST_FREE_YAW` | 0 | Rotation (°/s) always allowed. 0 = gyro opens every slide. Raise it (e.g. 60) to leave light drifts to you. |
 | `ASSIST_FILTER_ALPHA` | 0.85 | Smoothing, 0–1. Lower = smoother but slower to react. |
-| `ASSIST_DRIFT_TIGHTEN` | 0 | 0: in a drift the gyro only adds counter-steer, the turn gets wider. 1: also takes counter-steer away to hold the drift (tightens it). |
-| `ASSIST_UNDERSTEER_HELP` | 0 | 0: outside a drift the gyro only takes steering away, never adds more than your stick. 1: also adds steering when the car turns less than asked (feels like extra lock at low speed). |
 
 ## Docs
 

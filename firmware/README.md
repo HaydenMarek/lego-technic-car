@@ -59,9 +59,8 @@ First clone: `git submodule update --init` (Bluepad32).
 | `ASSIST_YAW_SIGN` | `assist.h` | −1 | Sign check in [DRIVING.md](../DRIVING.md#drift-assist-gyro). Checked on the car 2026-11-10. |
 | `ASSIST_GAIN` | `assist.h` | 0.40 | Steering % per °/s. Twitchy or wobbling: lower it. |
 | `ASSIST_MAX` | `assist.h` | 50 | Max gyro correction, steering % |
-| `ASSIST_DRIFT_DRIVER` | `assist.h` | 1.0 | Share of driver steering in a drift. Ramps 0.1 per frame (`ASSIST_DRIFT_RAMP`). |
-| `ASSIST_UNDERSTEER_HELP` | `assist.h` | 0 | 0: outside a drift, never steer further than the stick. |
-| `ASSIST_DRIFT_TIGHTEN` | `assist.h` | 0 | 0: in a drift, only add counter-steer (opens above `ASSIST_DRIFT_YAW` 60 °/s). |
+| `ASSIST_FREE_YAW` | `assist.h` | 0 | °/s always allowed before counter-steer. 0 = open every slide. |
+| `ASSIST_STICK_PRIORITY` | `assist.h` | 1.0 | Correction × (1 − this × |stick|/100). 1 = full stick, no assist. |
 | `MOTOR_PWM_HZ` | `motor.c` | 20000 | BTS7960 max ~25 kHz |
 
 ## How it runs

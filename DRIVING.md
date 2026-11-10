@@ -131,59 +131,75 @@ Each 20 ms frame:
 | max change per frame | 5° |
 | active | always (not only above some throttle) |
 
-Notes:
+That table is the **old Hub** version (`hub/control.py` in tag
+`legacy-arduino-hub`). "Steering degree" was the LEGO motor angle.
 
-- "Steering degree" was the LEGO steering motor's angle. The Pico firmware
-  uses **steering %** (−100…100), 3.0 °/s per %.
-- **Pico values now** (softened 2026-11-10 for more driver control):
+### Pico 2 W version
 
-  | Setting | Table | Pico now |
-  |---|---|---|
-  | gain | 0.60 | 0.40 |
-  | drift entry yaw | 20 | 25 |
-  | drift yaw | 180 | 60 |
-  | deadband | 2 | 8 |
-  | filter alpha | 0.65 | 0.85 |
-  | max correction | 40 | 50 % |
-  | max change per frame | 5 | 5 % |
-  | driver share in a drift | – | 1.0 (all) |
+The Pico uses **steering %** (−100…100) and works like an RC car steering
+gyro with **stick priority**. No drift mode, no target from the stick.
+Each 20 ms frame:
 
-- **No understeer help** (`ASSIST_UNDERSTEER_HELP` 0, Pico only). Outside a
-  drift, the assist only takes steering away or counter-steers. It never
-  steers further than your stick. Before: when the car turned less than
-  asked (slow or standing), the assist added lock, so 65 % stick gave full
-  lock. Set it to 1 to get that back.
-- **Sign check:** car unarmed, stick centered. Turn the car clockwise by hand.
-  The wheels should steer counter-clockwise. If not, flip `ASSIST_YAW_SIGN`.
-- **Drift opens, never tightens** (`ASSIST_DRIFT_TIGHTEN` 0, Pico only,
-  2026-11-10). In a drift the assist only **adds** counter-steer when the
-  slide rotates faster than `ASSIST_DRIFT_YAW` (+ deadband): the turn gets
-  wider. Slower slides: your steering only.
-  - Why: the table's step 5 also **takes away** counter-steer below the
-    drift yaw, to keep the slide going. On the car this tightened the
-    drift (assist OFF drifted normally, sign check passed).
-  - Opens too early: raise `ASSIST_DRIFT_YAW`. Too late: lower it
-    (0 = open every slide). Set `ASSIST_DRIFT_TIGHTEN` 1 for the old
-    behaviour.
-- In a drift, `ASSIST_DRIFT_DRIVER` is the share of your steering used.
-  Now 1.0 (all of it). Lower it (e.g. 0.6) to let the assist hold the drift
-  more. The share ramps over 100 ms (`ASSIST_DRIFT_RAMP`), so the servo
-  does not jump when a drift starts or ends.
-- Python version of this code: `hub/control.py` in tag `legacy-arduino-hub`.
+1. Reversing: reset, no correction.
+2. Filter: `f += alpha * (raw - f)`, then `yaw = YAW_SIGN * f`.
+3. `dir` = direction of the rotation (±1), `rate = |yaw|`.
+4. `excess = rate - FREE_YAW - deadband`. If > 0: `corr = dir * gain * excess`.
+   Else 0.
+5. Clamp `corr` to ±max. Then stick priority:
+   `corr *= 1 - priority * |steer| / 100`.
+6. Change `corr` at most `slew` per frame.
+7. Servo = `steer - corr`.
 
-**Pico 2 W firmware** (`firmware/src/assist.c`, `gyro.c`). Proof: PC tests
-pass, firmware builds. Softened values flashed over Wi-Fi 2026-11-10
-(Pico replied). Seen on the car 2026-11-10 (owner): sign check OK
-(`ASSIST_YAW_SIGN` −1 is right), drift tightened with assist ON. Drift
-opening fix: PC tests pass, flashed over Wi-Fi 2026-11-10 (Pico replied).
+What this gives:
 
-- Settings: top of `firmware/src/assist.h`. `ASSIST_YAW_SIGN` = −1 (chip
-  face up). Not checked yet.
+- **The correction comes from the gyro only.** Your stick is added on top.
+  The servo always moves the same way as the stick (0.5–1.5× as fast),
+  never backwards, never a snap.
+- The more you steer (either way), the less the assist does.
+  Full stick = no assist.
+- The correction always points **against** the rotation. It never tightens
+  a slide and never adds lock (standing still: servo = stick).
+
+| Setting (`assist.h`) | Old Hub | Pico now |
+|---|---|---|
+| `ASSIST_GAIN` | 0.60 | 0.40 |
+| `ASSIST_FREE_YAW` | (drift yaw 180) | 0 °/s |
+| `ASSIST_DEADBAND` | 2 | 8 °/s |
+| `ASSIST_FILTER_ALPHA` | 0.65 | 0.85 |
+| `ASSIST_MAX` | 40 | 50 % |
+| `ASSIST_SLEW` | 5 | 5 % per frame |
+| `ASSIST_STICK_PRIORITY` | – | 1.0 (full stick = no assist) |
+
+- `ASSIST_FREE_YAW`: rotation always allowed. 0 = fight every slide
+  (strongest stabilizer, a held drift needs clear counter-steer).
+  Raise it (e.g. 60) to leave light drifts to the driver.
+- `ASSIST_STICK_PRIORITY`: 1 = assist fades to 0 at full stick. Lower
+  (e.g. 0.5) = assist stays stronger while you steer, stick feels closer
+  to one-for-one. 0 = assist ignores the stick.
+
+Why it changed (all 2026-11-10, owner on the car):
+
+| Seen on the car | Cause | Fix |
+|---|---|---|
+| 65 % stick gave full lock when slow | Assist added lock when the car turned less than asked | Correction only against the rotation |
+| Drift got tighter with assist ON (OFF was fine) | Drift mode held 120 °/s, so it took counter-steer away | Same |
+| Adjusting the stick in a slide flipped the servo | Target jumped from 0 to the drift yaw when the stick crossed center | No target from the stick |
+| Still snapped: stick toward the rotation threw the wheels to full lock (stand test) | Target grew with the stick, so the correction vanished: servo moved 2.2× the stick | Correction from the gyro only, plus stick priority (step 5) |
+
+**Sign check:** car unarmed, stick centered. Turn the car clockwise by hand.
+The wheels should steer counter-clockwise. If not, flip `ASSIST_YAW_SIGN`.
+
+**Pico 2 W firmware** (`firmware/src/assist.c`, `gyro.c`):
+
+- Proof: sign check seen on the car 2026-11-10 (`ASSIST_YAW_SIGN` −1, chip
+  face up). Stick-priority version: PC tests pass, flashed over Wi-Fi
+  2026-11-10 (Pico replied), not seen on the car yet.
 - Gyro: MPU6500 Z axis, ±1000 °/s, chip low-pass 41 Hz, read every 20 ms.
 - Boot: the gyro measures its zero offset for ~1 s. **Car must stand still.**
 - `Y` toggles assist on/off (starts on). Use it to compare on the car.
 - Assist runs while the controller is connected, also unarmed (for the
   sign check). Failsafe and OTA: steering centered, no assist.
 - No gyro found, or a read fails: drive without assist. The car still drives.
-- Tune in this order: sign check, then `ASSIST_GAIN` (twitchy or
-  oscillating: lower it), then `ASSIST_MAX`.
+- Tune in this order: sign check, `ASSIST_GAIN` (twitchy or oscillating:
+  lower it), `ASSIST_STICK_PRIORITY` (stick feel), `ASSIST_FREE_YAW`
+  (drift feel), then `ASSIST_MAX`.
