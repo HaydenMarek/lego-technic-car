@@ -165,7 +165,8 @@ Notes:
 - Python version of this code: `hub/control.py` in tag `legacy-arduino-hub`.
 
 **Pico 2 W firmware** (`firmware/src/assist.c`, `gyro.c`). Proof: PC tests
-pass, firmware builds. Not seen on the car yet.
+pass, firmware builds. Softened values flashed over Wi-Fi 2026-11-10
+(Pico replied). Not seen on the car yet.
 
 - Settings: top of `firmware/src/assist.h`. `ASSIST_YAW_SIGN` = −1 (chip
   face up). Not checked yet.
