@@ -21,6 +21,13 @@ static float raw(float aligned) { return ASSIST_YAW_SIGN * aligned; }
 // Round to nearest, like assist_step does.
 static int rnd(float v) { return (int)(v < 0.0f ? v - 0.5f : v + 0.5f); }
 
+// Expected correction for a steady excess yaw (before ASSIST_MAX), so the
+// tests follow ASSIST_GAIN and ASSIST_DEADBAND when they are tuned.
+static float corr_for(float excess) {
+    return excess > 0.0f ? ASSIST_GAIN * (excess - ASSIST_DEADBAND)
+                         : ASSIST_GAIN * (excess + ASSIST_DEADBAND);
+}
+
 // n frames with the same input, return the last output.
 static int run(assist_t *a, int steer, float yaw, int motor, int n) {
     int out = steer;
@@ -40,8 +47,8 @@ static void test_still_no_correction(void) {
 static void test_deadband(void) {
     assist_t a;
     assist_reset(&a);
-    CHECK_EQ(run(&a, 0, 2.0f, 0, 50), 0); // inside +/-2 deg/s
-    CHECK_EQ(run(&a, 0, -2.0f, 0, 50), 0);
+    CHECK_EQ(run(&a, 0, ASSIST_DEADBAND, 0, 50), 0); // inside the deadband
+    CHECK_EQ(run(&a, 0, -ASSIST_DEADBAND, 0, 50), 0);
 }
 
 // Sign check from DRIVING.md: car turned by hand to the "positive" side,
@@ -49,10 +56,10 @@ static void test_deadband(void) {
 static void test_hand_turn_counter_steers(void) {
     assist_t a;
     assist_reset(&a);
-    // excess 12 -> (12 - 2) * 0.6 = 6 %
-    CHECK_EQ(run(&a, 0, 12, 0, 50), -6);
+    // excess 12 -> (12 - deadband) * gain (4, 0.6: 4.8 %)
+    CHECK_EQ(run(&a, 0, 12, 0, 50), -rnd(corr_for(12)));
     assist_reset(&a);
-    CHECK_EQ(run(&a, 0, -12, 0, 50), 6);
+    CHECK_EQ(run(&a, 0, -12, 0, 50), rnd(corr_for(12)));
 }
 
 static void test_clamp_and_slew(void) {
@@ -80,17 +87,16 @@ static void test_drift_hold(void) {
     assist_t a;
     assist_reset(&a);
     // Steering left (-20), car rotating right at 100 deg/s (a slide).
-    // want = +180, excess = -80 -> correction -46.8 (needs ASSIST_MAX >= 47).
-    // Output = share * -20 + 46.8 (0.7: +32.8): below the drift yaw, the
-    // assist takes away counter-steer to keep the slide going.
-    CHECK_EQ(run(&a, -20, 100, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f + 46.8f));
+    // want = +180, excess = -80 -> correction about -46 (needs ASSIST_MAX >= 48).
+    // Output = share * -20 - correction (0.7: about +32): below the drift
+    // yaw, the assist takes away counter-steer to keep the slide going.
+    CHECK_EQ(run(&a, -20, 100, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - corr_for(-80)));
     // Spinning faster than the drift yaw: more counter-steer.
     assist_reset(&a);
-    // excess 20 -> 10.8; share * -20 - 10.8
-    CHECK_EQ(run(&a, -20, 200, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - 10.8f));
+    CHECK_EQ(run(&a, -20, 200, 50, 50), rnd(ASSIST_DRIFT_DRIVER * -20.0f - corr_for(20)));
     // Below the entry rate (19 deg/s) it is not a drift: want = -60, full share.
     assist_reset(&a);
-    CHECK_EQ(run(&a, -20, 19, 50, 50), -66); // excess 79 -> 46.2; -20 - 46.2
+    CHECK_EQ(run(&a, -20, 19, 50, 50), rnd(-20.0f - corr_for(79)));
 }
 
 // In a drift the driver's steering counts ASSIST_DRIFT_DRIVER:

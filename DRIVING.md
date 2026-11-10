@@ -136,14 +136,14 @@ Notes:
 - "Steering degree" was the LEGO steering motor's angle. The Pico firmware
   uses **steering %** (−100…100), 3.0 °/s per %. Changed from the table
   after driving: max correction 80 % (was 40), 10 % per frame (was 5),
-  filter alpha 0.85 (was 0.65, reacts sooner).
+  filter alpha 0.85 (was 0.65, reacts sooner), deadband 8 °/s (was 2).
 - **Sign check:** car unarmed, stick centered. Turn the car clockwise by hand.
   The wheels should steer counter-clockwise. If not, flip `ASSIST_YAW_SIGN`.
 - Counter-steering a slide below 180 °/s: the assist **takes away**
   counter-steer to keep the slide going (step 5). If the car spins out
   instead, lower `ASSIST_DRIFT_YAW`.
-- In a drift, only 70 % of your steering is used (`ASSIST_DRIFT_DRIVER`
-  0.7), so small corrections do not overpower the assist. The share ramps
+- In a drift, only 60 % of your steering is used (`ASSIST_DRIFT_DRIVER`
+  0.6), so small corrections do not overpower the assist. The share ramps
   over 100 ms (`ASSIST_DRIFT_RAMP`), so the servo does not jump when a
   drift starts or ends.
 - Python version of this code: `hub/control.py` in tag `legacy-arduino-hub`.

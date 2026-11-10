@@ -59,7 +59,7 @@ First clone: `git submodule update --init` (Bluepad32).
 | `ASSIST_YAW_SIGN` | `assist.h` | −1 | Sign check in [DRIVING.md](../DRIVING.md#drift-assist-gyro). Not checked yet. |
 | `ASSIST_GAIN` | `assist.h` | 0.60 | Steering % per °/s. Twitchy or wobbling: lower it. |
 | `ASSIST_MAX` | `assist.h` | 80 | Max gyro correction, steering % |
-| `ASSIST_DRIFT_DRIVER` | `assist.h` | 0.7 | Share of driver steering in a drift. Ramps 0.1 per frame (`ASSIST_DRIFT_RAMP`). |
+| `ASSIST_DRIFT_DRIVER` | `assist.h` | 0.6 | Share of driver steering in a drift. Ramps 0.1 per frame (`ASSIST_DRIFT_RAMP`). |
 | `MOTOR_PWM_HZ` | `motor.c` | 20000 | BTS7960 max ~25 kHz |
 
 ## How it runs

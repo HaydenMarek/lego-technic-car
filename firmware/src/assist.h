@@ -19,11 +19,11 @@
 #define ASSIST_YAW_PER_STEER 3.0f   // deg/s the driver "asks for" per steering %
 #define ASSIST_DRIFT_ENTRY 20.0f    // deg/s against the steering = drift
 #define ASSIST_DRIFT_YAW 180.0f     // deg/s held during a drift
-#define ASSIST_DEADBAND 4.0f        // deg/s of excess ignored (gyro noise)
+#define ASSIST_DEADBAND 8.0f        // deg/s of excess ignored (gyro noise)
 #define ASSIST_FILTER_ALPHA 0.85f   // 0..1, lower = smoother but later
 #define ASSIST_MAX 80.0f            // max correction, steering %
 #define ASSIST_SLEW 10.0f            // max correction change per 20 ms frame, %
-#define ASSIST_DRIFT_DRIVER 0.7f    // share of driver steering used in a drift (1 = all)
+#define ASSIST_DRIFT_DRIVER 0.6f    // share of driver steering used in a drift (1 = all)
 #define ASSIST_DRIFT_RAMP 0.1f      // max change of that share per frame (no jumps)
 
 // --- API -------------------------------------------------------------------
