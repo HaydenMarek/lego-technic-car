@@ -46,13 +46,16 @@ Gyro drift assist is built (see below). Current protection is not.
 
 ## Steering
 
-- Steering curve exponent 2 (half stick = quarter steering):
+- Steering curve exponent 3 on the Pico (half stick = eighth steering).
+  Was 2 (half = quarter); raised 2026-11-11, small moves went too far.
+  Flashed over Wi-Fi 2026-11-11 (Pico replied), not seen on the car yet:
 
   ```text
   out = sign(in) * |in|^exp / 100^(exp-1)
   ```
 
-- Exponent 1 = linear, 3 = even softer around center.
+- Exponent 1 = linear, 2 = soft, 3 = softer around center (`STEER_EXPONENT`
+  in `firmware/src/drive.h`, whole numbers only).
 - **Deadzone first.** The Elite 2 sticks rest up to ~9 % off center
   ([KNOWLEDGE.md](KNOWLEDGE.md#xbox-controller-bluetooth)). Start with
   |in| ≤ 10 → 0, then scale 10…100 to 0…100 before the curve. Tune on the car.

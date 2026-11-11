@@ -67,9 +67,19 @@ static void test_steer(void) {
     CHECK_EQ(drive_steer_percent(&(pad_state_t){.lx = -51}), 0); // -9 %, inside deadzone
     CHECK_EQ(drive_steer_percent(&(pad_state_t){.lx = 511}), 100);
     CHECK_EQ(drive_steer_percent(&(pad_state_t){.lx = -512}), -100);
-    // 55 % stick -> 50 % after deadzone -> 25 % after the curve.
-    CHECK_EQ(drive_steer_percent(&(pad_state_t){.lx = 282}), 25);
-    CHECK_EQ(drive_steer_percent(&(pad_state_t){.lx = -282}), -25);
+    // 55 % stick -> 50 % after deadzone -> 50^exp / 100^(exp-1) after the
+    // curve (exp 2: 25 %, exp 3: 12 %).
+    int half = 50;
+    for (int i = 1; i < STEER_EXPONENT; i++) half = half * 50 / 100;
+    CHECK_EQ(drive_steer_percent(&(pad_state_t){.lx = 282}), half);
+    CHECK_EQ(drive_steer_percent(&(pad_state_t){.lx = -282}), -half);
+    // Curve rises steadily: never backwards over the whole stick.
+    int prev = -100;
+    for (int lx = -512; lx <= 511; lx++) {
+        int out = drive_steer_percent(&(pad_state_t){.lx = lx});
+        CHECK_EQ(out >= prev, 1);
+        prev = out;
+    }
 }
 
 static void test_ramp_up_and_release(void) {

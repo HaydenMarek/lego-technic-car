@@ -52,7 +52,7 @@ flash after a change.
 | `SERVO_RANGE_US` | `servo.c` | 373 | Steering angle. Full stick = center ± this. 373 ≈ 67° on a 360° servo (~5.6 µs per degree). |
 | `SERVO_DIRECTION` | `servo.c` | 1 | `1` or `-1`. Flip if the stick steers the wrong way. |
 | `STEER_DEADZONE` | `drive.h` | 10 | Stick % treated as center |
-| `STEER_EXPONENT` | `drive.h` | 2 | Steering curve. 1 = linear, 2 = finer control near center. |
+| `STEER_EXPONENT` | `drive.h` | 3 | Steering curve. 1 = linear, 2 = finer near center, 3 = finer still (half stick = 12 %). |
 
 ### Gyro (drift assist)
 

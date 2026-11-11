@@ -29,7 +29,7 @@
 #define DRIVE_ARM_TRIGGER_MAX 2 // both triggers <= this % to arm
 
 #define STEER_DEADZONE 10 // |stick| <= this % is centered
-#define STEER_EXPONENT 2  // 1 linear, 2 half stick = quarter steering
+#define STEER_EXPONENT 3  // 1 linear, 2 half = quarter, 3 half = eighth (softer center)
 
 // Ramp steps per 20 ms frame (output points).
 #define RAMP_UP_STEP 20      // 0 -> 100 in 100 ms
