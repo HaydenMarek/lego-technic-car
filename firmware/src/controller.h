@@ -35,6 +35,14 @@ void controller_set_log(bool on);
 // True once Bluetooth is up and scanning (used as a health check for OTA).
 bool controller_bt_ready(void);
 
+// Indicator on the onboard LED (e.g. D-pad gain): `count` short flashes.
+// While connected the LED is on, so each flash is CONTROLLER_LED_FLASH_MS
+// off, with the same time on between flashes; then back to normal.
+// 1 = changed, 2 = at a limit, 3 = saved. A new call restarts it.
+// Call from the BTstack run loop.
+#define CONTROLLER_LED_FLASH_MS 100
+void controller_led_flash(int count);
+
 // OTA update: stop scanning, refuse new connections. Keeps the link.
 void controller_pause(void);
 // Undo controller_pause(): a paired controller reconnects by itself.

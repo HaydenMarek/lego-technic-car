@@ -1,5 +1,6 @@
 // Driving firmware: Xbox controller -> BTS7960 motors + steering servo.
 // Logic is in drive.c and assist.c (DRIVING.md). No current protection yet.
+// Gyro assist: heading hold (assist.c). D-pad up/down: rate gain +-0.05, saved.
 // Motor output: power level 75..100 % in 5 % steps (A up, B down), no extra cap.
 
 #include <stdio.h>
@@ -17,10 +18,14 @@
 #include "motor.h"
 #include "ota.h"
 #include "servo.h"
+#include "settings.h"
 
 // Firmware stuck this long: the Pico resets, EN pull-down coasts the motors.
 #define WATCHDOG_MS 1000
 #define STATUS_EVERY_FRAMES 25 // status line every 500 ms while armed
+// Save the D-pad gain this long after the last change (fewer flash writes),
+// and only while the motor output is 0 (a flash write pauses the CPU briefly).
+#define GAIN_SAVE_DELAY_FRAMES 100 // 2 s
 
 static drive_t drive;
 static assist_t assist;
@@ -31,6 +36,58 @@ static float last_yaw;
 static btstack_timer_source_t drive_timer;
 static uint32_t frame;
 static bool had_input;
+static uint8_t prev_dpad = 0xFF; // for D-pad edges; held at connect = no change
+static bool gain_unsaved;
+static uint32_t gain_changed_frame;
+
+// Gain as "0.45" without float printf.
+static void print_gain(const char *what) {
+    printf("assist gain %d.%02d%s\n", assist.gain / 100, assist.gain % 100, what);
+}
+
+// Rate gain like a radio's gain channel: D-pad up/down +-0.05, LED flash,
+// saved in flash a bit later. Loaded from flash on the first frame.
+static void gain_tick(const pad_state_t *input, const drive_out_t *out) {
+    if (frame == 1) {
+        int32_t saved;
+        if (settings_load_int(SETTINGS_TAG_ASSIST_GAIN, &saved) && assist_gain_valid((int)saved)) {
+            assist.gain = (int)saved;
+            print_gain(" (saved)");
+        } else {
+            print_gain(" (default)");
+        }
+    }
+
+    if (input) {
+        uint8_t pressed = input->dpad & (uint8_t)~prev_dpad;
+        prev_dpad = input->dpad;
+        unsigned dir = pressed & (PAD_UP | PAD_DOWN);
+        if (dir == PAD_UP || dir == PAD_DOWN) { // both at once: ignored
+            int gain = assist_gain_adjust(assist.gain, pressed);
+            if (gain != assist.gain) {
+                assist.gain = gain;
+                gain_unsaved = true;
+                gain_changed_frame = frame;
+            }
+            // At 0 or MAX (just reached, or pressed again there): double flash.
+            bool limit = assist_gain_at_limit(gain);
+            print_gain(!limit ? "" : gain == 0 ? " (min)" : " (max)");
+            controller_led_flash(limit ? 2 : 1);
+        }
+    } else {
+        prev_dpad = 0xFF;
+    }
+
+    if (gain_unsaved && frame - gain_changed_frame >= GAIN_SAVE_DELAY_FRAMES &&
+        out->motor == 0 && !ota_active()) {
+        gain_unsaved = false;
+        bool ok = settings_save_int(SETTINGS_TAG_ASSIST_GAIN, assist.gain);
+        print_gain(ok ? " saved" : " SAVE FAILED");
+        if (ok) {
+            controller_led_flash(3); // triple flash = stored in flash
+        }
+    }
+}
 
 // Driver steering + gyro correction. Without input, a gyro or with assist
 // off: the driver's steering unchanged.
@@ -89,6 +146,7 @@ static void on_drive_tick(btstack_timer_source_t *ts) {
     int steer = steer_with_assist(input, out);
     motor_set(out.motor);
     servo_set(steer);
+    gain_tick(input, &out); // after the outputs: a flash save may pause briefly
 
     if (had_input && input == NULL) {
         printf(ota_active() ? "OTA: update started, coasting\n"
@@ -105,9 +163,10 @@ static void on_drive_tick(btstack_timer_source_t *ts) {
         printf("power %d %%\n", drive.power);
     }
     if (input && drive.mode != DRIVE_UNARMED && frame % STATUS_EVERY_FRAMES == 0) {
-        printf("%s %3d%% throttle %4d motor %4d steer %4d -> %4d yaw %6.1f\n",
+        printf("%s %3d%% throttle %4d motor %4d steer %4d -> %4d yaw %6.1f hold %5.1f gain %d.%02d\n",
                drive_mode_name(drive.mode), drive.power, drive_throttle_percent(input), out.motor,
-               out.steer, steer, (double)last_yaw);
+               out.steer, steer, (double)last_yaw, (double)assist.held, assist.gain / 100,
+               assist.gain % 100);
     }
 
     btstack_run_loop_set_timer(ts, DRIVE_FRAME_MS);
@@ -118,7 +177,7 @@ int main(void) {
     motor_init(); // first: bridge off (coast)
     servo_init(); // center
     drive_init(&drive);
-    assist_reset(&assist);
+    assist_init(&assist); // default gain; the saved one loads on the first frame
 
     stdio_init_all();
     if (watchdog_caused_reboot()) {

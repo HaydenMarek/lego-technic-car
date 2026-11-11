@@ -32,6 +32,7 @@ add_executable(car_firmware
     src/ota.c
     src/ota_logic.c
     src/flash_bank_fix.c
+    src/settings.c
 )
 
 # btstack_config.h, sdkconfig.h and lwipopts.h live in src/; the libraries include them too.

@@ -61,7 +61,9 @@ All in `assist.h`. How to tune: [DRIVING.md](DRIVING.md#drift-assist-gyro).
 | Setting | Now | What it does |
 | --- | --- | --- |
 | `ASSIST_YAW_SIGN` | −1 | `1` or `-1`. Flip if the wheels turn *with* the car when you rotate it by hand. Check this first. |
-| `ASSIST_GAIN` | 0.40 | How hard the gyro counter-steers. Twitchy or wobbling: lower it. |
+| `ASSIST_GAIN_DEFAULT` | 0.40 | How hard the gyro counter-steers against rotation. Tune with D-pad up/down (±0.05, saved). Twitchy or wobbling: lower it. |
+| `ASSIST_HOLD_GAIN` | 0.50 | Heading hold: how hard it steers back to the last heading. 0 = plain rate mode. Wobble on the straight: lower it. |
+| `ASSIST_HOLD_RELEASE` | 1.0 | How fast steering sets a new heading. 1 = full stick sets it at once. |
 | `ASSIST_MAX` | 50 | Max gyro correction, steering %. Below 100, so the gyro never fully overrides you. |
 | `ASSIST_STICK_PRIORITY` | 1.0 | The more you steer, the less the gyro does. 1 = full stick turns it off. Lower = gyro stays stronger while you steer. |
 | `ASSIST_FREE_YAW` | 0 | Rotation (°/s) always allowed. 0 = gyro opens every slide. Raise it (e.g. 60) to leave light drifts to you. |

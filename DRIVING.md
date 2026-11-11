@@ -140,38 +140,55 @@ That table is the **old Hub** version (`hub/control.py` in tag
 ### Pico 2 W version
 
 The Pico uses **steering %** (−100…100) and works like an RC car steering
-gyro with **stick priority**. No drift mode, no target from the stick.
-Each 20 ms frame:
+gyro in **heading hold** mode (like Futaba AVCS), with **stick priority**.
+No drift mode, no target from the stick. Each 20 ms frame:
 
 1. Reversing: reset, no correction.
 2. Filter: `f += alpha * (raw - f)`, then `yaw = YAW_SIGN * f`.
 3. `dir` = direction of the rotation (±1), `rate = |yaw|`.
-4. `excess = rate - FREE_YAW - deadband`. If > 0: `corr = dir * gain * excess`.
-   Else 0.
-5. Clamp `corr` to ±max. Then stick priority:
+4. Heading error: if `rate > deadband`: `held += yaw * 0.02 s`.
+   Clamp `held` to ±`HOLD_MAX`°.
+5. Rate term: `excess = rate - FREE_YAW - deadband`. If > 0:
+   `corr = dir * gain * excess`. Else 0.
+   Hold term: `corr += hold_gain * held`.
+6. Clamp `corr` to ±max. Then stick priority:
    `corr *= 1 - priority * |steer| / 100`.
-6. Change `corr` at most `slew` per frame.
-7. Servo = `steer - corr`.
+7. Change `corr` at most `slew` per frame.
+8. The stick sets a new heading: `held *= 1 - release * |steer| / 100`
+   (used from the next frame on).
+9. Servo = `steer - corr`.
 
 What this gives:
 
+- **The wheels stay turned** until the car is back on the held heading.
+  Rate mode let go as soon as the rotation stopped.
+- The held heading is where the car pointed when you last steered. Full
+  stick sets a new heading at once. Less stick hands it over more slowly.
 - **The correction comes from the gyro only.** Your stick is added on top.
-  The servo always moves the same way as the stick (0.5–1.5× as fast),
-  never backwards, never a snap.
+  In one frame the servo always moves the same way as the stick (0.5–1.5×
+  as fast), never backwards, never a snap.
 - The more you steer (either way), the less the assist does.
   Full stick = no assist.
-- The correction always points **against** the rotation. It never tightens
-  a slide and never adds lock (standing still: servo = stick).
+- While the car rotates, the correction points **against** the rotation.
+  Standing still and never rotated: servo = stick.
+- Rotation inside the deadband is not added up, so gyro offset does not
+  slowly turn the wheels.
+- Carried or spun by hand while connected: the wheels stay turned. Steer
+  once (or press `Y` twice) to clear it.
+- `ASSIST_HOLD_GAIN` 0 = the old rate mode.
 
 | Setting (`assist.h`) | Old Hub | Pico now |
 |---|---|---|
-| `ASSIST_GAIN` | 0.60 | 0.40 |
+| `ASSIST_GAIN_DEFAULT` (rate gain) | 0.60 | 0.40 (D-pad changes it, see below) |
 | `ASSIST_FREE_YAW` | (drift yaw 180) | 0 °/s |
 | `ASSIST_DEADBAND` | 2 | 8 °/s |
 | `ASSIST_FILTER_ALPHA` | 0.65 | 0.85 |
 | `ASSIST_MAX` | 40 | 50 % |
 | `ASSIST_SLEW` | 5 | 5 % per frame |
 | `ASSIST_STICK_PRIORITY` | – | 1.0 (full stick = no assist) |
+| `ASSIST_HOLD_GAIN` | – | 0.50 % per degree off heading |
+| `ASSIST_HOLD_MAX` | – | 60° (anti-windup) |
+| `ASSIST_HOLD_RELEASE` | – | 1.0 (full stick = new heading) |
 
 - `ASSIST_FREE_YAW`: rotation always allowed. 0 = fight every slide
   (strongest stabilizer, a held drift needs clear counter-steer).
@@ -179,6 +196,11 @@ What this gives:
 - `ASSIST_STICK_PRIORITY`: 1 = assist fades to 0 at full stick. Lower
   (e.g. 0.5) = assist stays stronger while you steer, stick feels closer
   to one-for-one. 0 = assist ignores the stick.
+- `ASSIST_HOLD_GAIN`: how hard it steers back to the heading. Too high:
+  wobble on the straight, the car resists or steers for you. Too low: the
+  rear never settles. Start low.
+- `ASSIST_HOLD_RELEASE`: lower = the gyro holds the old heading longer
+  while you steer (more artificial, more resistance).
 
 Why it changed (all 2026-11-10, owner on the car):
 
@@ -187,22 +209,56 @@ Why it changed (all 2026-11-10, owner on the car):
 | 65 % stick gave full lock when slow | Assist added lock when the car turned less than asked | Correction only against the rotation |
 | Drift got tighter with assist ON (OFF was fine) | Drift mode held 120 °/s, so it took counter-steer away | Same |
 | Adjusting the stick in a slide flipped the servo | Target jumped from 0 to the drift yaw when the stick crossed center | No target from the stick |
-| Still snapped: stick toward the rotation threw the wheels to full lock (stand test) | Target grew with the stick, so the correction vanished: servo moved 2.2× the stick | Correction from the gyro only, plus stick priority (step 5) |
+| Still snapped: stick toward the rotation threw the wheels to full lock (stand test) | Target grew with the stick, so the correction vanished: servo moved 2.2× the stick | Correction from the gyro only, plus stick priority (step 6) |
+
+2026-11-11: rate mode changed to heading hold (owner's request). Not seen
+on the car yet.
 
 **Sign check:** car unarmed, stick centered. Turn the car clockwise by hand.
-The wheels should steer counter-clockwise. If not, flip `ASSIST_YAW_SIGN`.
+The wheels should steer counter-clockwise and **stay** there. Turn it back:
+they center. If they steer the wrong way, flip `ASSIST_YAW_SIGN`.
 
 **Pico 2 W firmware** (`firmware/src/assist.c`, `gyro.c`):
 
 - Proof: sign check seen on the car 2026-11-10 (`ASSIST_YAW_SIGN` −1, chip
-  face up). Stick-priority version: PC tests pass, flashed over Wi-Fi
-  2026-11-10 (Pico replied), not seen on the car yet.
+  face up). Heading hold version: PC tests pass, firmware builds,
+  flashed over Wi-Fi 2026-11-11 (Pico replied). Not seen on the car yet.
 - Gyro: MPU6500 Z axis, ±1000 °/s, chip low-pass 41 Hz, read every 20 ms.
 - Boot: the gyro measures its zero offset for ~1 s. **Car must stand still.**
 - `Y` toggles assist on/off (starts on). Use it to compare on the car.
+- **Rate gain from the controller** (like a radio's gain channel):
+
+  | Input (new press) | Does |
+  |---|---|
+  | D-pad up | rate gain +0.05 (max 1.50) |
+  | D-pad down | rate gain −0.05 (min 0 = no rate term) |
+
+  - Each change: LED flashes once (off for 0.1 s), serial prints
+    `assist gain 0.45`.
+  - Limits: lowest 0.00, highest 1.50. The press that reaches one, and
+    every press at one, gives a **double flash**. Serial adds `(min)` or
+    `(max)`.
+  - Works armed or unarmed, assist on or off. Holding counts once.
+  - Saved in flash 2 s after the last change, once the motor output is 0:
+    **triple flash**, serial `assist gain 0.45 saved`. A failed save: no
+    flash, serial `SAVE FAILED`. Kept through reboots, USB and Wi-Fi flashes.
+
+  | LED (flashes) | Means |
+  |---|---|
+  | 1 | gain changed |
+  | 2 | at a limit (0.00 or 1.50) |
+  | 3 | saved in flash |
+  - Boot prints `assist gain 0.45 (saved)` or `(default)`.
+  - Changes the rate gain only. `ASSIST_HOLD_GAIN` is still set in `assist.h`.
+  - Back to the default: press down/up until it reads 0.40.
+  - Proof: saved gain kept after a power cycle, seen on the car 2026-11-11
+    (owner). Triple flash on save: flashed over Wi-Fi 2026-11-11 (Pico
+    replied), not seen on the car yet.
 - Assist runs while the controller is connected, also unarmed (for the
   sign check). Failsafe and OTA: steering centered, no assist.
 - No gyro found, or a read fails: drive without assist. The car still drives.
-- Tune in this order: sign check, `ASSIST_GAIN` (twitchy or oscillating:
-  lower it), `ASSIST_STICK_PRIORITY` (stick feel), `ASSIST_FREE_YAW`
-  (drift feel), then `ASSIST_MAX`.
+- Tune in this order: sign check, rate gain with the D-pad (twitchy or
+  oscillating: lower it), `ASSIST_HOLD_GAIN` (wobble on the straight: lower it),
+  `ASSIST_STICK_PRIORITY` (stick feel), `ASSIST_FREE_YAW` (drift feel),
+  then `ASSIST_MAX`.
+- Status line shows `hold` = heading error in degrees, `gain` = rate gain.

@@ -8,7 +8,8 @@ motors + steering servo, as in [DRIVING.md](../DRIVING.md).
 - Motor output: power level 75…100 % PWM duty in 5 % steps (`A` up, `B`
   down, `LB`+`RB` = 100). `DRIVE_OUTPUT_CAP` = 100 (no extra cap; was 50
   until 2026-11-08).
-- Gyro drift assist (MPU6500): built, PC tests pass, not seen on the car.
+- Gyro drift assist (MPU6500), heading hold mode: built, PC tests pass,
+  not seen on the car.
   `Y` toggles it. No gyro wired = drives without it.
 - Not built yet: current protection.
 - Status: builds, PC tests pass. Serial test passed 2026-11-03 (Pico
@@ -28,7 +29,7 @@ First clone: `git submodule update --init` (Bluepad32).
 | --- | --- |
 | `src/main.c` | Start-up order, 20 ms drive loop, watchdog, serial status |
 | `src/drive.c/.h` | Driving logic: arming, throttle, steering, ramps, failsafe. No Pico SDK, tested on PC. Settings are at the top of `drive.h`. |
-| `src/assist.c/.h` | Gyro drift assist (yaw-rate P control). No Pico SDK, tested on PC. Settings at the top of `assist.h`. |
+| `src/assist.c/.h` | Gyro drift assist (heading hold: yaw rate + heading error). No Pico SDK, tested on PC. Settings at the top of `assist.h`. |
 | `src/gyro.c/.h` | MPU6500 on I2C0 (GP4/GP5): Z yaw rate, zero offset at boot |
 | `src/motor.c/.h` | BTS7960: 20 kHz PWM on GP2/GP3, EN on GP6. 0 = coast. |
 | `src/servo.c/.h` | Servo: 50 Hz on GP15 |
@@ -37,6 +38,7 @@ First clone: `git submodule update --init` (Bluepad32).
 | `src/ota.c/.h` | Wi-Fi, mDNS, OTA upload server, flash writes, reboot, TBYB buy |
 | `src/ota_logic.c/.h` | OTA protocol, UF2 checks, buy decision. No Pico SDK, tested on PC. |
 | `src/flash_bank_fix.c` | Pairing keys readable when running from partition B |
+| `src/settings.c/.h` | Settings saved in flash (rate gain). BTstack TLV store, same 8 KB as the pairing keys, outside the OTA slots. |
 | `src/sdkconfig.h`, `src/btstack_config.h`, `src/lwipopts.h` | Bluepad32 / BTstack / lwIP settings |
 | `partition_table.json` | A/B slots for OTA. Built into `build/pico2w/partition_table.uf2`. |
 | `.env.example` | Copy to `.env` (git-ignored): Wi-Fi name, password, OTA token |
@@ -57,7 +59,9 @@ First clone: `git submodule update --init` (Bluepad32).
 | `SERVO_DIRECTION` | `servo.c` | 1 | Set back to 1 after fitting on the car (−1 steered the wrong way). Change sign if the stick steers the wrong way. |
 | `STEER_DEADZONE` | `drive.h` | 10 | Stick % treated as center |
 | `ASSIST_YAW_SIGN` | `assist.h` | −1 | Sign check in [DRIVING.md](../DRIVING.md#drift-assist-gyro). Checked on the car 2026-11-10. |
-| `ASSIST_GAIN` | `assist.h` | 0.40 | Steering % per °/s. Twitchy or wobbling: lower it. |
+| `ASSIST_GAIN_DEFAULT` | `assist.h` | 40 (0.40) | Rate gain, hundredths. Default only: tune with D-pad up/down, saved in flash ([DRIVING.md](../DRIVING.md#pico-2-w-version)). |
+| `ASSIST_HOLD_GAIN` | `assist.h` | 0.50 | Steering % per degree off the held heading. 0 = rate mode. |
+| `ASSIST_HOLD_RELEASE` | `assist.h` | 1.0 | Heading error × (1 − this × |stick|/100) each frame. |
 | `ASSIST_MAX` | `assist.h` | 50 | Max gyro correction, steering % |
 | `ASSIST_FREE_YAW` | `assist.h` | 0 | °/s always allowed before counter-steer. 0 = open every slide. |
 | `ASSIST_STICK_PRIORITY` | `assist.h` | 1.0 | Correction × (1 − this × |stick|/100). 1 = full stick, no assist. |
@@ -103,10 +107,14 @@ wifi: connected, 192.168.1.50 (lego-car.local), OTA port 4242
 waiting for controller (hold its pair button)...     every 5 s, LED blinks
 BLE link connected: interval 15.00 ms, latency 4, timeout 500 ms
 BLE link updated: ...                                 if the controller asks for new values
+assist gain 0.40 (saved)                              or "(default)": first frame after boot
 input OK. Press A (triggers released) to arm.
+assist gain 0.45                                      D-pad up/down, LED flashes once
+assist gain 1.50 (max)                                at a limit (0.00 min, 1.50 max): double flash
+assist gain 0.45 saved                                2 s later, once the motor output is 0. LED triple flash.
 mode UNARMED -> ARMED
 power 80 %                                            A or B pressed
-ARMED  80% throttle   45 motor   40 steer  -12 ->   -8 yaw   10.3   every 500 ms while armed
+ARMED  80% throttle   45 motor   40 steer  -12 ->   -8 yaw   10.3 hold  -2.1 gain 0.45   every 500 ms while armed
 drift assist OFF                                      Y pressed
 DISCONNECTED 14:CB:65:7E:40:EE
 FAILSAFE: controller lost, coasting

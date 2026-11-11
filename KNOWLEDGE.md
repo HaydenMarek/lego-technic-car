@@ -104,7 +104,13 @@ The plan for each row is in [WIRING.md](WIRING.md).
 - Firmware toolchain (Pico SDK):
   - Arm GNU Toolchain 14.2.Rel1 (winget `Arm.GnuArmEmbeddedToolchain`),
     `C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\14.2 rel1`.
-  - CMake 4.4, Ninja, host gcc 16.2 (WinLibs, winget).
+  - CMake 4.4, Ninja, host gcc 16.2 (WinLibs, winget). Folder:
+    `~/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin`.
+    Not on Git Bash's PATH. Add this line to `~/.bashrc`:
+
+    ```sh
+    export PATH="$PATH:$HOME/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin"
+    ```
   - Pico SDK 2.1.1 and picotool 2.1.1: downloaded by CMake into `firmware/.deps/`.
 - How to build and flash: see [AGENTS.md](AGENTS.md#building-and-flashing-the-pico-2-w).
 
@@ -114,6 +120,7 @@ Each one cost a failed build. The fix is already in `firmware/`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `cmake: command not found` in Git Bash | WinLibs folder is not on Git Bash's PATH | Add it to `~/.bashrc` (see [Tools on this laptop](#tools-on-this-laptop)) |
 | `invalid reference: .../firmware/2.1.1` | `pico_sdk_import.cmake` stores the SDK tag as `FILEPATH`, so CMake turns it into a path | Preset sets the tag with `"type": "STRING"` |
 | `'uint8_t' does not name a type` in pioasm | SDK 2.1.1 pioasm + GCC 13 or newer: missing `<cstdint>` | Build preset env `CXXFLAGS=-include cstdint` |
 | Access violation (`0xC0000005`) in `picotool coprodis` | SDK 2.1.1 builds picotool from the unpinned `develop` branch | Prebuilt picotool 2.1.1 from `raspberrypi/pico-sdk-tools` |
@@ -146,6 +153,7 @@ Pitfalls fixed in `firmware/` (found while building, 2026-11-04):
 | Problem | Fix |
 | --- | --- |
 | BTstack reads pairing keys via `XIP_BASE` → wrong place from partition B | `-Wl,--wrap=pico_flash_bank_instance`, `src/flash_bank_fix.c` |
+| SDK flash-bank **write** also re-reads the page via `XIP_BASE`. The bank is outside the partition window → fault → watchdog reset. Seen as "car restarts after a D-pad gain change" (2026-11-11, owner). Also hit any new pairing. | `flash_bank_fix.c` replaces `write` too (untranslated read + `flash_safe_execute`). Seen on the car 2026-11-11 (owner): no restart, gain kept after a power cycle. |
 | Bluepad32 links `pico_cyw43_arch_none` (`CYW43_LWIP=0`), we need lwIP (`=1`). Mixed → different `cyw43_t` layout | `CMakeLists.txt` swaps the library on the `bluepad32` target |
 | SDK example writes flash with interrupts on | `flash_safe_execute()` around our own flash writes |
 | SDK `rom_explicit_buy()` already calls `flash_safe_execute()`. Wrapping it again leaves interrupts **off for good**: one saved IRQ state per core. Symptom: all timers, Bluetooth, USB serial stop after `bought`; LED frozen. | Call `rom_explicit_buy()` directly. Never nest `flash_safe_execute()`. Pico replied 2026-11-05. |

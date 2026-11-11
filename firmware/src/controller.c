@@ -42,6 +42,9 @@ static uint32_t last_print_ms;
 static btstack_timer_source_t status_timer;
 static uint32_t tick;
 
+static btstack_timer_source_t flash_timer;
+static int flash_phases; // 100 ms phases left of controller_led_flash(); 0 = idle
+
 static uint32_t now_ms(void) {
     return to_ms_since_boot(get_absolute_time());
 }
@@ -90,10 +93,48 @@ void controller_resume(void) {
     uni_bt_start_scanning_and_autoconnect_unsafe();
 }
 
+// LED state when no flash pattern runs.
+static bool normal_led(void) {
+    if (paused) {
+        return tick % 2;
+    }
+    return controller_connected() || (tick / 2) % 2;
+}
+
+// Flash phase: odd phases left = LED flipped (the "flash"), even = normal.
+// count 2: flipped, normal, flipped, then done (back to normal).
+static void show_flash_phase(void) {
+    bool normal = normal_led();
+    set_led(flash_phases % 2 ? !normal : normal); // flipped shows in every state
+}
+
+static void on_flash_tick(btstack_timer_source_t *ts) {
+    flash_phases--;
+    show_flash_phase();
+    if (flash_phases > 0) {
+        btstack_run_loop_set_timer(ts, CONTROLLER_LED_FLASH_MS);
+        btstack_run_loop_add_timer(ts);
+    }
+}
+
+void controller_led_flash(int count) {
+    if (count <= 0) {
+        return;
+    }
+    btstack_run_loop_remove_timer(&flash_timer); // a new pattern restarts it
+    flash_phases = 2 * count - 1;
+    show_flash_phase();
+    btstack_run_loop_set_timer_handler(&flash_timer, on_flash_tick);
+    btstack_run_loop_set_timer(&flash_timer, CONTROLLER_LED_FLASH_MS);
+    btstack_run_loop_add_timer(&flash_timer);
+}
+
 // Runs every TICK_MS on the Bluetooth thread.
 static void on_status_tick(btstack_timer_source_t *ts) {
     tick++;
-    if (paused) {
+    if (flash_phases > 0) {
+        // The flash owns the LED; its last phase restores it.
+    } else if (paused) {
         set_led(tick % 2); // fast blink: OTA update running
     } else if (!controller_connected()) {
         set_led((tick / 2) % 2); // blink, 0.5 s on / 0.5 s off: scanning
