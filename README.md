@@ -2,6 +2,18 @@
 
 I had problem with official LEGO® Technic Powered Up Hub because it don't support high current output to drivetrain motors. Usually they have built-in current protection or other type of limit. So this open-source project covers how to create your own controller for LEGO® Technic RC Car, it can be usefull for those who want to create such controller from scratch, with components they can buy online. During my progress I will update this repository with guidance, schematics and parts list.
 
+## Current Progress
+
+Videos:
+[video1](https://github.com/user-attachments/assets/e812835b-0677-429a-a408-c9db4ff0e9e8) 
+[video2](https://github.com/user-attachments/assets/a73226b2-4d51-424d-9c64-fccf154c292e)
+
+<img width="426" height="240" alt="success-gif" src="https://github.com/user-attachments/assets/b6a1095a-7bd2-4540-ab49-2c118c7c1797" />
+<img width="426" height="240" alt="gyro-gif" src="https://github.com/user-attachments/assets/609b6375-2f68-4da2-9209-e411a6e695d0" />
+
+<img width="1690" height="779" alt="Screenshot 2026-11-12 113507" src="https://github.com/user-attachments/assets/4cdd404b-89b3-462e-ad40-5aa7615253ee" />
+<img width="1165" height="1047" alt="Screenshot 2026-11-12 113649" src="https://github.com/user-attachments/assets/d762ffea-1064-4a7e-a77b-25091074b879" />
+
 ## Parts
 
 | Part | Job | Cost |
